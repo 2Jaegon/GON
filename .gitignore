@@ -9,3 +9,9 @@
 
 # 개인 PC 환경 설정 안내 (공개 제외)
 docs/ENV-SETUP.local.md
+
+# 로컬 임시 로그 및 도구 캐시
+viewer.log
+viewer.err
+graphify-out/
+CLAUDE.md
