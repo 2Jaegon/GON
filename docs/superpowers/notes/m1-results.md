@@ -17,3 +17,11 @@
 - (b) 스킬 폴더 기준 상대 경로 해석 및 서버 기동 확인: `plugins/gon/skills/gon/../../viewer/server.mjs`를 `path.resolve`로 풀어 실행했을 때 `Open: http://127.0.0.1:<port>/?t=<token>` 한 줄 출력 정상 확인.
 - (c) 플러그인 캐시/폴더 읽기 권한 창 여부: 대화형 `--plugin-dir` 세션에서의 실제 권한 창 발생 여부는 사용자 대화형 세션(Task 10)에서 최종 확인 예정(미확인).
 
+## Task 8 토큰 비용 추정 (`claude --plugin-dir plugins/gon plugin details gon`)
+- Component inventory: Skills (1) `gon`, Agents (1) `gon-expert`, Hooks (0), MCP servers (0), LSP servers (0)
+- Projected token cost (Always-on): `~196 tok` added to every session
+- Per-component (rounded):
+  - `gon`: always-on `~100 tok`, on-invoke `~2.5k tok`
+  - `gon-expert`: always-on `~90 tok`, on-invoke `~530 tok`
+
+

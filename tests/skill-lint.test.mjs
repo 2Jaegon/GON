@@ -139,7 +139,7 @@ test('SKILL.md is at most 120 lines', () => {
   assert.ok(lines.length <= 120, `SKILL.md has ${lines.length} lines (max 120)`);
 });
 
-describe.skip('Task 8 card and gon-expert constraints', () => {
+describe('Task 8 card and gon-expert constraints', () => {
   test('each fallback card is 10 to 20 lines and contains required rules', () => {
     for (const name of CARD_NAMES) {
       const cardPath = path.join(CARDS_DIR, `${name}.md`);
