@@ -149,7 +149,10 @@ gon/ (공개 저장소 2Jaegon/Gon)
 
 ### 5.4 그래프 화면과 서버
 - **프론트엔드**: 읽기 전용 그래프(5.1의 점·선, 4.2의 모양). 마크다운은 정제해서 렌더하고 CSP를 적용한다.
-- **백엔드**: `127.0.0.1`에서만 열리는 작은 로컬 서버(Node 단일 파일). `.gon/`을 읽어 화면에 실시간으로 전달하는 것만 한다. 실행 시마다 바뀌는 토큰으로 접근을 막고, 경로 탈출을 차단하며, AI 실행·설치 엔드포인트는 두지 않는다.
+- **백엔드**: `127.0.0.1`에서만 열리는 작은 로컬 서버(Node 내장 모듈 단일 진입점 `viewer/server.mjs`, `--host` 옵션 없음). `.gon/`을 400ms 간격 폴링으로 감시해 화면에 실시간(`GET /api/stream`, `fetch` 스트림)으로 전달하는 것만 한다.
+  - 토큰은 최초 `Open: http://127.0.0.1:<port>/?t=<token>` 주소에서 브라우저가 한 번 읽은 뒤 즉시 `history.replaceState`로 주소창에서 지우고, 모든 `/api/*` 호출과 스트림 요청에는 `x-gon-token` 헤더로만 전달한다(`timingSafeEqual` 비교, 쿼리 토큰 거부).
+  - 모든 응답(오류 포함)에 보안 헤더를 붙인다: `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy: same-origin` (`Access-Control-*` 헤더 없음).
+  - `Host`와 `Origin`/`Sec-Fetch-Site`를 검증하고, 정적 파일은 고정 목록만 서빙하며, `.md` 파일 읽기는 허용 문자·단일 디코딩·심볼릭 링크/정션 차단·`fs.realpath` 후 `path.relative` 판정·최대 1MB 제한으로 경로 탈출을 차단한다. AI 실행·설치 엔드포인트는 두지 않는다.
 - **Node가 없는 PC**: 브라우저가 `.gon` 폴더를 직접 열어 1초마다 다시 읽는 방식(File System Access API)으로 대체한다. Chrome·Edge에서만 되고 `file://`에서 되는지는 아직 확인 전이다.
 - 요청 입력과 실행은 항상 사용자의 AI 채팅에서 한다.
 - 화면은 AI가 "그래프 보여줘"라는 말에 서버를 띄우고 브라우저를 열어 준다(구현 방법은 빌더 판단, 실행 전 사용자에게 보여 주고 확인).
