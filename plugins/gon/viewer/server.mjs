@@ -8,6 +8,8 @@ import { RUN_ID_RE, parseEvents, buildRun, runStatus } from './events.mjs';
 
 const VIEWER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MAX_FILE_BYTES = 1024 * 1024;
+const MAX_EVENTS_BYTES = 4 * 1024 * 1024;
+const READ_CHUNK_BYTES = 64 * 1024;
 const MAX_SSE_CLIENTS = 8;
 
 const SECURITY_HEADERS = Object.freeze({
@@ -58,6 +60,44 @@ function sendJson(res, status, data) {
   sendResponse(res, status, 'application/json; charset=utf-8', JSON.stringify(data));
 }
 
+const STATUS_TEXT = { 400: 'Bad Request', 413: 'Payload Too Large' };
+
+// Reads a regular, single-link file of at most maxBytes, re-checking the cap while reading
+// so a file that grows mid-read is still rejected. Returns { status: 200, buf } or { status }.
+function readBoundedFile(filePath, maxBytes) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const st = fs.fstatSync(fd);
+    // nlink > 1: a hard link can point at a file outside the run folder (no reparse point to detect).
+    if (!st.isFile() || st.nlink > 1) return { status: 400 };
+    if (st.size > maxBytes) return { status: 413 };
+    const chunk = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, maxBytes + 1));
+    const parts = [];
+    let total = 0;
+    for (;;) {
+      const n = fs.readSync(fd, chunk, 0, chunk.length, total);
+      if (n === 0) break;
+      total += n;
+      if (total > maxBytes) return { status: 413 };
+      parts.push(Buffer.from(chunk.subarray(0, n)));
+    }
+    return { status: 200, buf: Buffer.concat(parts, total) };
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // ignore close error
+      }
+    }
+  }
+}
+
+function sendStatus(res, status) {
+  sendResponse(res, status, 'text/plain; charset=utf-8', STATUS_TEXT[status] || 'Error');
+}
+
 function isLinkOrJunction(targetPath) {
   const st = fs.lstatSync(targetPath);
   if (st.isSymbolicLink()) return true;
@@ -89,7 +129,7 @@ function inspectGonDir(gonDir) {
       if (!fs.existsSync(evPath)) continue;
       if (isLinkOrJunction(evPath)) continue;
       const evStat = fs.lstatSync(evPath);
-      if (!evStat.isFile()) continue;
+      if (!evStat.isFile() || evStat.nlink > 1) continue;
       runIds.push(entry.name);
     }
     runIds.sort();
@@ -263,9 +303,9 @@ export async function startServer(opts = {}) {
         for (const runId of gonCheck.runIds) {
           // One unreadable or hostile run must not take down the whole list: skip it.
           try {
-            const evPath = path.join(gonDir, runId, 'events.jsonl');
-            const text = fs.readFileSync(evPath, 'utf8');
-            const { events } = parseEvents(text);
+            const read = readBoundedFile(path.join(gonDir, runId, 'events.jsonl'), MAX_EVENTS_BYTES);
+            if (read.status !== 200) continue;
+            const { events } = parseEvents(read.buf.toString('utf8'));
             const run = buildRun(runId, events);
             summaries.push({
               id: run.id,
@@ -329,9 +369,12 @@ export async function startServer(opts = {}) {
           sendResponse(res, 404, 'text/plain; charset=utf-8', 'Not Found');
           return;
         }
-        const evPath = path.join(gonDir, runId, 'events.jsonl');
-        const text = fs.readFileSync(evPath, 'utf8');
-        const { events, skipped } = parseEvents(text);
+        const read = readBoundedFile(path.join(gonDir, runId, 'events.jsonl'), MAX_EVENTS_BYTES);
+        if (read.status !== 200) {
+          sendStatus(res, read.status);
+          return;
+        }
+        const { events, skipped } = parseEvents(read.buf.toString('utf8'));
         const run = buildRun(runId, events);
         sendJson(res, 200, {
           run,
@@ -355,39 +398,12 @@ export async function startServer(opts = {}) {
           return;
         }
 
-        let fd;
-        try {
-          fd = fs.openSync(safeTarget, 'r');
-          const st = fs.fstatSync(fd);
-          if (!st.isFile()) {
-            sendResponse(res, 400, 'text/plain; charset=utf-8', 'Bad Request');
-            return;
-          }
-          if (st.size > MAX_FILE_BYTES) {
-            sendResponse(res, 413, 'text/plain; charset=utf-8', 'Payload Too Large');
-            return;
-          }
-          const readBuf = Buffer.allocUnsafe(MAX_FILE_BYTES + 1);
-          let totalRead = 0;
-          while (totalRead <= MAX_FILE_BYTES) {
-            const n = fs.readSync(fd, readBuf, totalRead, MAX_FILE_BYTES + 1 - totalRead, totalRead);
-            if (n === 0) break;
-            totalRead += n;
-          }
-          if (totalRead > MAX_FILE_BYTES) {
-            sendResponse(res, 413, 'text/plain; charset=utf-8', 'Payload Too Large');
-            return;
-          }
-          sendResponse(res, 200, 'text/plain; charset=utf-8', readBuf.subarray(0, totalRead));
-        } finally {
-          if (fd !== undefined) {
-            try {
-              fs.closeSync(fd);
-            } catch {
-              // ignore close error
-            }
-          }
+        const read = readBoundedFile(safeTarget, MAX_FILE_BYTES);
+        if (read.status !== 200) {
+          sendStatus(res, read.status);
+          return;
         }
+        sendResponse(res, 200, 'text/plain; charset=utf-8', read.buf);
         return;
       }
 

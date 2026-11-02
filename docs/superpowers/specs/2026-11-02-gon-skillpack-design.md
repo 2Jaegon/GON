@@ -152,7 +152,7 @@ gon/ (공개 저장소 2Jaegon/Gon)
 - **백엔드**: `127.0.0.1`에서만 열리는 작은 로컬 서버(Node 내장 모듈 단일 진입점 `viewer/server.mjs`, `--host` 옵션 없음). `.gon/`을 400ms 간격 폴링으로 감시해 화면에 실시간(`GET /api/stream`, `fetch` 스트림)으로 전달하는 것만 한다.
   - 토큰은 최초 `Open: http://127.0.0.1:<port>/?t=<token>` 주소에서 브라우저가 한 번 읽은 뒤 즉시 `history.replaceState`로 주소창에서 지우고, 모든 `/api/*` 호출과 스트림 요청에는 `x-gon-token` 헤더로만 전달한다(`timingSafeEqual` 비교, 쿼리 토큰 거부).
   - 모든 응답(오류 포함)에 보안 헤더를 붙인다: `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy: same-origin` (`Access-Control-*` 헤더 없음).
-  - `Host`와 `Origin`/`Sec-Fetch-Site`를 검증하고, 정적 파일은 고정 목록만 서빙하며, `.md` 파일 읽기는 허용 문자·단일 디코딩·심볼릭 링크/정션 차단·`fs.realpath` 후 `path.relative` 판정·최대 1MB 제한으로 경로 탈출을 차단한다. AI 실행·설치 엔드포인트는 두지 않는다.
+  - `Host`와 `Origin`/`Sec-Fetch-Site`를 검증하고, 정적 파일은 고정 목록만 서빙하며, `.md` 파일 읽기는 허용 문자·단일 디코딩·심볼릭 링크/정션 차단·하드 링크(`nlink > 1`) 거부·`fs.realpath` 후 `path.relative` 판정·최대 1MB 제한으로 경로 탈출을 차단한다. `events.jsonl`도 하드 링크면 목록에서 빼고, 4MB(`MAX_EVENTS_BYTES`)를 넘으면 목록에서 빼고 상세 요청은 413으로 답한다(읽는 도중 커져도 상한을 넘으면 거부). AI 실행·설치 엔드포인트는 두지 않는다.
 - **Node가 없는 PC**: 스파이크(Task 6) 확인 결과, `file://`로 연 페이지에서는 브라우저 CORS 정책(`Origin: null`) 때문에 `<script type="module">`로 `.mjs` 모듈을 불러올 수 없어 로컬 Node 서버(`viewer/server.mjs`)가 필요하다(Node 미설치 시 Node 설치 안내).
 - 요청 입력과 실행은 항상 사용자의 AI 채팅에서 한다.
 - 화면은 AI가 "그래프 보여줘"라는 말에 서버를 띄우고 브라우저를 열어 준다(구현 방법은 빌더 판단, 실행 전 사용자에게 보여 주고 확인).

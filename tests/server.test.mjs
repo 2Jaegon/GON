@@ -697,3 +697,69 @@ test('/api/runs stays 200 with the good run listed when another run has a deeply
     ws.cleanup();
   }
 });
+
+test('rejects hard links (nlink > 1) to files outside the run folder, for .md files and for events.jsonl', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const outsideSecret = path.join(ws.root, 'outside-secret.md');
+    fs.writeFileSync(outsideSecret, 'HARDLINK_OUTSIDE_SECRET', 'utf8');
+    // No skip: if the hard link cannot be created, the test fails.
+    fs.linkSync(outsideSecret, path.join(runDir, 'leak.md'));
+
+    const linkedRunId = '20261102-1431-beef';
+    fs.mkdirSync(path.join(ws.gonDir, linkedRunId));
+    const outsideEvents = path.join(ws.root, 'outside-events.jsonl');
+    fs.copyFileSync(path.join(FIXTURES, 'good-run', 'events.jsonl'), outsideEvents);
+    fs.linkSync(outsideEvents, path.join(ws.gonDir, linkedRunId, 'events.jsonl'));
+
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const fileRes = await rawRequest(srv.port, {
+        path: '/api/runs/20261102-1430-a1b2/file?path=leak.md',
+        headers: { 'x-gon-token': srv.token },
+      });
+      assert.equal(fileRes.status, 400);
+      assert.doesNotMatch(fileRes.body, /HARDLINK_OUTSIDE_SECRET/);
+
+      const listRes = await rawRequest(srv.port, { path: '/api/runs', headers: { 'x-gon-token': srv.token } });
+      const ids = JSON.parse(listRes.body).map((r) => r.id);
+      assert.deepEqual(ids, ['20261102-1430-a1b2']);
+
+      const detailRes = await rawRequest(srv.port, { path: `/api/runs/${linkedRunId}`, headers: { 'x-gon-token': srv.token } });
+      assert.equal(detailRes.status, 404);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('an events.jsonl over 4MB is left out of the list and its detail is 413, keeping responses small', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const bigId = '20261102-1432-b16b';
+    fs.mkdirSync(path.join(ws.gonDir, bigId));
+    const start = `{"v":1,"t":"2026-11-02T14:32:00+09:00","ev":"run.start","run":"${bigId}","req":"big","tool":"claude-code","depth":"quick"}\n`;
+    const node = `{"t":"2026-11-02T14:32:01+09:00","ev":"node","id":"n1","from":["main"],"stage":"grill","status":"done","sum":"${'x'.repeat(4 * 1024 * 1024)}"}\n`;
+    fs.writeFileSync(path.join(ws.gonDir, bigId, 'events.jsonl'), start + node, 'utf8');
+
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const listRes = await rawRequest(srv.port, { path: '/api/runs', headers: { 'x-gon-token': srv.token } });
+      assert.equal(listRes.status, 200);
+      assert.ok(listRes.body.length < 64 * 1024, `list body is ${listRes.body.length} bytes`);
+      assert.deepEqual(JSON.parse(listRes.body).map((r) => r.id), ['20261102-1430-a1b2']);
+
+      const detailRes = await rawRequest(srv.port, { path: `/api/runs/${bigId}`, headers: { 'x-gon-token': srv.token } });
+      assert.equal(detailRes.status, 413);
+      assert.ok(detailRes.body.length < 1024, `detail body is ${detailRes.body.length} bytes`);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
