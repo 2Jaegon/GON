@@ -153,7 +153,7 @@ gon/ (공개 저장소 2Jaegon/Gon)
   - 토큰은 최초 `Open: http://127.0.0.1:<port>/?t=<token>` 주소에서 브라우저가 한 번 읽은 뒤 즉시 `history.replaceState`로 주소창에서 지우고, 모든 `/api/*` 호출과 스트림 요청에는 `x-gon-token` 헤더로만 전달한다(`timingSafeEqual` 비교, 쿼리 토큰 거부).
   - 모든 응답(오류 포함)에 보안 헤더를 붙인다: `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy: same-origin` (`Access-Control-*` 헤더 없음).
   - `Host`와 `Origin`/`Sec-Fetch-Site`를 검증하고, 정적 파일은 고정 목록만 서빙하며, `.md` 파일 읽기는 허용 문자·단일 디코딩·심볼릭 링크/정션 차단·`fs.realpath` 후 `path.relative` 판정·최대 1MB 제한으로 경로 탈출을 차단한다. AI 실행·설치 엔드포인트는 두지 않는다.
-- **Node가 없는 PC**: 브라우저가 `.gon` 폴더를 직접 열어 1초마다 다시 읽는 방식(File System Access API)으로 대체한다. Chrome·Edge에서만 되고 `file://`에서 되는지는 아직 확인 전이다.
+- **Node가 없는 PC**: 스파이크(Task 6) 확인 결과, `file://`로 연 페이지에서는 브라우저 CORS 정책(`Origin: null`) 때문에 `<script type="module">`로 `.mjs` 모듈을 불러올 수 없어 로컬 Node 서버(`viewer/server.mjs`)가 필요하다(Node 미설치 시 Node 설치 안내).
 - 요청 입력과 실행은 항상 사용자의 AI 채팅에서 한다.
 - 화면은 AI가 "그래프 보여줘"라는 말에 서버를 띄우고 브라우저를 열어 준다(구현 방법은 빌더 판단, 실행 전 사용자에게 보여 주고 확인).
 
@@ -232,7 +232,7 @@ Gon은 API를 직접 호출하지 않으므로 `cache_control`을 걸 수 없다
 
 **확인됨(공식 문서)**: Claude Code는 `claude plugin marketplace add`, `claude plugin install`, `update`, `uninstall`이 있고 일반 플러그인은 프롬프트 없이 설치된다. 플러그인 하나에 skills, agents, commands를 함께 넣을 수 있고 `plugin.json`의 필수 필드는 `name` 하나, `marketplace.json`은 `name`, `owner`, `plugins`가 필수다. 설치 후 같은 세션에서 쓰려면 사용자가 `/reload-plugins`를 입력하거나 재시작해야 한다. 서브에이전트는 기본 동시 20개까지, 권한은 메인 세션 모드를 따른다.
 **확인됨(조사)**: Codex·Antigravity·Gemini CLI 모두 `SKILL.md` 표준과 `.agents/skills` 경로를 읽고, 각자 플러그인/확장 배포 수단이 있다. superpowers가 한 저장소에 도구별 설치 파일을 함께 둔 선례가 있다.
-**미확인**: 5.5 표의 설치 명령은 문서와 README에서 읽은 것이고 실제 설치 시험 전이다. Claude 전용 frontmatter를 다른 도구가 무시하는지, `file://`에서 폴더 읽기가 되는지, Gemini 병렬 실행, 도구별 스킬 호출 표기, `find-skills`의 설치 방식과 도구별 동작은 실측이 필요하다.
+**미확인**: 5.5 표의 설치 명령은 문서와 README에서 읽은 것이고 실제 설치 시험 전이다. Claude 전용 frontmatter를 다른 도구가 무시하는지, Gemini 병렬 실행, 도구별 스킬 호출 표기, `find-skills`의 설치 방식과 도구별 동작은 실측이 필요하다(`file://`에서 ES 모듈 기반 뷰어를 여는 방식은 CORS 정책으로 불가함을 확인함).
 
 ## 9. 빌더에게 맡기는 것
 
