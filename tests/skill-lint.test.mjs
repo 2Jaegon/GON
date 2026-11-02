@@ -126,6 +126,13 @@ test('PowerShell append snippet uses a literal single-quoted here-string and the
   assert.match(specText, /PowerShell[^\n]*@'/, "spec §5.3 must describe the single-quoted here-string");
 });
 
+test('spec 5.4 states that out/path= is a flat file name matching SAFE_OUT_RE', () => {
+  const specText = fs.readFileSync(path.resolve('docs/superpowers/specs/2026-11-02-gon-skillpack-design.md'), 'utf8');
+  const section = specText.slice(specText.indexOf('### 5.4'), specText.indexOf('### 5.5'));
+  assert.match(section, /`out`[^\n]*`path=`[^\n]*SAFE_OUT_RE[^\n]*하위 폴더/);
+  assert.match(section, /4MB/);
+});
+
 test('gon-expert forbids installs and network access without approval', () => {
   const text = fs.readFileSync(path.join(AGENTS_DIR, 'gon-expert.md'), 'utf8');
   assert.match(text, /^\d+\. 승인 없이 패키지 설치·네트워크 접속을 하지 않는다/m);
