@@ -850,3 +850,29 @@ test('link guard: a symlink alias.md pointing to brief.md in the same run folder
     ws.cleanup();
   }
 });
+
+test('/api/runs does not hide a run when building its summary throws: the error surfaces as 500', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    // Drop run.end so runStatus has to compute stalled/running (it then calls Date.parse).
+    const evPath = path.join(runDir, 'events.jsonl');
+    const lines = fs.readFileSync(evPath, 'utf8').split('\n').filter((l) => l.trim() && !l.includes('"run.end"'));
+    fs.writeFileSync(evPath, lines.join('\n') + '\n', 'utf8');
+    const srv = await startServer({ gonDir: ws.gonDir });
+    // Simulate a regression inside runStatus (it calls Date.parse) without a hook in shipped code.
+    const originalParse = Date.parse;
+    try {
+      Date.parse = () => {
+        throw new Error('injected runStatus failure');
+      };
+      const res = await rawRequest(srv.port, { path: '/api/runs', headers: { 'x-gon-token': srv.token } });
+      assert.equal(res.status, 500, `a broken summary must not turn into a silently shorter list: ${res.body}`);
+    } finally {
+      Date.parse = originalParse;
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});

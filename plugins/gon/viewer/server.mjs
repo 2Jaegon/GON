@@ -300,25 +300,27 @@ export async function startServer(opts = {}) {
       if (rawPath === '/api/runs' && rawQuery === '') {
         const summaries = [];
         for (const runId of gonCheck.runIds) {
-          // One unreadable or hostile run must not take down the whole list: skip it.
+          // Only the file read is guarded: a run deleted or locked after listing is skipped.
+          // parseEvents/buildRun/runStatus are hostile-input safe; a bug there must surface as a 500.
+          let read;
           try {
-            const read = readBoundedFile(path.join(gonDir, runId, 'events.jsonl'), MAX_EVENTS_BYTES);
-            if (read.status !== 200) continue;
-            const { events } = parseEvents(read.buf.toString('utf8'));
-            const run = buildRun(runId, events);
-            summaries.push({
-              id: run.id,
-              req: run.req,
-              tool: run.tool,
-              depth: run.depth,
-              status: runStatus(run),
-              startedAt: run.startedAt,
-              endedAt: run.endedAt,
-              nodeCount: run.nodes.length,
-            });
+            read = readBoundedFile(path.join(gonDir, runId, 'events.jsonl'), MAX_EVENTS_BYTES);
           } catch {
-            // skipped
+            continue;
           }
+          if (read.status !== 200) continue;
+          const { events } = parseEvents(read.buf.toString('utf8'));
+          const run = buildRun(runId, events);
+          summaries.push({
+            id: run.id,
+            req: run.req,
+            tool: run.tool,
+            depth: run.depth,
+            status: runStatus(run),
+            startedAt: run.startedAt,
+            endedAt: run.endedAt,
+            nodeCount: run.nodes.length,
+          });
         }
         sendJson(res, 200, summaries);
         return;
