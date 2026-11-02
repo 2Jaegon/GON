@@ -691,7 +691,9 @@ test('/api/runs stays 200 with the good run listed when another run has a deeply
       assert.ok(runs.some((r) => r.id === '20261102-1430-a1b2' && r.status === 'done'), listRes.body);
 
       const detailRes = await rawRequest(srv.port, { path: '/api/runs/20261102-1431-dead', headers: { 'x-gon-token': srv.token } });
-      assert.notEqual(detailRes.status, 500);
+      assert.equal(detailRes.status, 200);
+      const detail = JSON.parse(detailRes.body);
+      assert.deepEqual(detail.run.nodes.map((n) => [n.id, n.from]), [['n1', []]]);
     } finally {
       await srv.close();
     }
