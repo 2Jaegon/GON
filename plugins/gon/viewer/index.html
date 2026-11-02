@@ -1,1 +1,111 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>Gon Viewer</title><link rel="stylesheet" href="/style.css"></head><body><script type="module" src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gon 작업 흐름 그래프</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="brand-group">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <h1 class="brand-title">Gon 작업 흐름 그래프</h1>
+      <span id="global-status-badge" class="badge badge-loading" role="status" aria-live="polite">불러오는 중…</span>
+    </div>
+    <div class="topbar-meta">
+      <span id="run-counter" class="meta-text">요청 0건</span>
+      <button id="refresh-btn" type="button" class="btn-secondary" aria-label="새로고침">새로고침</button>
+    </div>
+  </header>
+
+  <div id="state-banner" class="state-banner is-hidden" role="alert" aria-live="assertive">
+    <div class="state-banner-content">
+      <strong id="state-banner-title">상태 안내</strong>
+      <p id="state-banner-desc"></p>
+    </div>
+    <button id="state-retry-btn" type="button" class="btn-primary is-hidden">다시 시도</button>
+  </div>
+
+  <main class="workspace" role="main">
+    <section class="canvas-pane" aria-label="단계별 흐름 그래프">
+      <div class="run-strip" id="run-strip" aria-label="요청 목록"></div>
+      <div id="empty-state" class="empty-state is-hidden">
+        <h2 class="empty-title">아직 기록된 Gon 작업이 없습니다</h2>
+        <p class="empty-desc">사용 중인 AI 채팅창에서 <code>/gon 만들고 싶은 아이디어</code>를 입력하면 이 화면에 단계별 점과 선이 실시간으로 나타납니다.</p>
+      </div>
+      <div id="graph-scroll" class="graph-scroll">
+        <svg id="graph-svg" class="graph-svg" role="group" aria-label="작업 단계 노드 그래프" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <footer class="legend-bar" aria-label="상태 범례">
+        <span class="legend-item"><span class="legend-dot dot-running" aria-hidden="true"></span>진행 중</span>
+        <span class="legend-item"><span class="legend-dot dot-done" aria-hidden="true"></span>완료</span>
+        <span class="legend-item"><span class="legend-dot dot-failed" aria-hidden="true"></span>실패</span>
+        <span class="legend-item"><span class="legend-dot dot-stalled" aria-hidden="true"></span>멈춤? (10분+)</span>
+        <span class="legend-item"><span class="legend-dot dot-skipped" aria-hidden="true"></span>건너뜀</span>
+      </footer>
+    </section>
+
+    <aside id="detail-panel" class="detail-panel" aria-label="선택한 점 상세 정보">
+      <div id="detail-placeholder" class="detail-placeholder">
+        <h2 class="panel-heading">점 상세 정보</h2>
+        <p class="muted-copy">왼쪽 그래프에서 점을 클릭하거나 Tab 키로 이동한 뒤 Enter를 누르면 해당 단계가 수행한 요약과 산출물(.md)을 볼 수 있습니다.</p>
+      </div>
+
+      <div id="detail-content" class="detail-content is-hidden">
+        <div class="detail-header">
+          <div class="detail-title-row">
+            <h2 id="detail-title" class="panel-heading">노드 이름</h2>
+            <span id="detail-status" class="badge">완료</span>
+          </div>
+          <p id="detail-run-req" class="detail-run-req"></p>
+          <button id="detail-req-toggle" type="button" class="btn-link is-hidden">요청 전체 보기</button>
+        </div>
+
+        <div id="detail-flags" class="detail-flags"></div>
+
+        <dl class="detail-meta-grid">
+          <div class="meta-cell">
+            <dt>단계 (stage)</dt>
+            <dd id="detail-stage">-</dd>
+          </div>
+          <div class="meta-cell">
+            <dt>역할 / 실행</dt>
+            <dd id="detail-role">-</dd>
+          </div>
+          <div class="meta-cell">
+            <dt>소요 시간</dt>
+            <dd id="detail-duration">-</dd>
+          </div>
+          <div class="meta-cell">
+            <dt>이전 점 (from)</dt>
+            <dd id="detail-from">-</dd>
+          </div>
+        </dl>
+
+        <section class="detail-section" aria-labelledby="sum-heading">
+          <h3 id="sum-heading" class="section-heading">한 일 요약</h3>
+          <p id="detail-sum" class="detail-sum"></p>
+          <button id="detail-sum-toggle" type="button" class="btn-link is-hidden">요약 전체 보기</button>
+        </section>
+
+        <section id="detail-files-section" class="detail-section is-hidden" aria-labelledby="files-heading">
+          <h3 id="files-heading" class="section-heading">변경한 파일 목록</h3>
+          <ul id="detail-files" class="file-list"></ul>
+        </section>
+
+        <section class="detail-section" aria-labelledby="out-heading">
+          <div class="section-title-row">
+            <h3 id="out-heading" class="section-heading">산출물 내용</h3>
+            <code id="detail-out-name" class="code-pill">없음</code>
+          </div>
+          <div id="detail-out-status" class="muted-copy"></div>
+          <article id="detail-out" class="markdown-body"></article>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
