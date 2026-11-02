@@ -1,0 +1,5 @@
+# superpowers 브라우저 도우미가 만드는 임시 목업과 상태 파일
+.superpowers/
+
+# 로컬 전용 Claude Code 설정
+.claude/settings.local.json
