@@ -10,7 +10,19 @@ const END_STATUSES = ['done', 'failed'];
 const VIAS = ['subagent', 'inline'];
 const STALL_MS = 10 * 60 * 1000;
 const MAX_FROM = 32;
-const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_TS_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+// ISO-8601 shape, a real calendar date/time (Date.parse alone accepts 2026-02-30 and T24:00), valid offset.
+function isIsoTimestamp(t) {
+  if (typeof t !== 'string') return false;
+  const m = ISO_TS_RE.exec(t);
+  if (!m || Number.isNaN(Date.parse(t))) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const u = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+  if (u.getUTCFullYear() !== y || u.getUTCMonth() !== mo - 1 || u.getUTCDate() !== d) return false;
+  if (u.getUTCHours() !== h || u.getUTCMinutes() !== mi || u.getUTCSeconds() !== s) return false;
+  return m[7] === undefined || (Number(m[7]) <= 23 && Number(m[8]) <= 59);
+}
 
 function isNodeRef(v) {
   return typeof v === 'string' && (v === 'main' || NODE_ID_RE.test(v));
@@ -159,7 +171,7 @@ export function validateRun(events, opts = {}) {
       continue;
     }
 
-    if (typeof ev.t !== 'string' || !ISO_TS_RE.test(ev.t) || Number.isNaN(Date.parse(ev.t))) {
+    if (!isIsoTimestamp(ev.t)) {
       errors.push(`event[${i}]: invalid ISO timestamp t`);
     }
 

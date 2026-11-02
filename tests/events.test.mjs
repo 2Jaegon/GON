@@ -153,7 +153,11 @@ test('validateRun requires t to be an ISO-8601 timestamp with time and offset', 
   for (const bad of ['1', '2026', '2026-11-02', 'Mon Nov 02 2026', '2026-11-02 14:30:00', '2026-11-02T14:30:00', '2026-13-02T14:30:00Z']) {
     assert.equal(validateRun([start(bad)]).ok, false, `t=${bad} must be rejected`);
   }
-  for (const good of ['2026-11-02T14:30:00+09:00', '2026-11-02T05:30:00.123Z', '2026-11-02T05:30:00Z']) {
+  // Date.parse alone accepts these impossible calendar values, so t must round-trip.
+  for (const bad of ['2026-02-30T00:00:00Z', '2026-11-02T24:00:00Z', '2026-11-02T14:60:00Z', '2026-11-02T14:30:60+09:00', '2026-04-31T10:00:00+09:00']) {
+    assert.equal(validateRun([start(bad)]).ok, false, `t=${bad} must be rejected`);
+  }
+  for (const good of ['2026-11-02T14:30:00+09:00', '2026-11-02T05:30:00.123Z', '2026-11-02T05:30:00Z', '2028-02-29T23:59:59-05:00']) {
     const res = validateRun([start(good)]);
     assert.equal(res.ok, true, `t=${good}: ${res.errors.join('; ')}`);
   }
