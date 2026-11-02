@@ -169,6 +169,45 @@ test('validateRun rejects the reserved node id main', () => {
   assert.ok(res.errors.some((e) => /main/.test(e) && /reserved/.test(e)), res.errors.join('; '));
 });
 
+function reverseChainEvents(n, lastParent = 'main') {
+  const events = [{ v: 1, t: '2026-11-02T14:30:00+09:00', ev: 'run.start', run: '20261102-1430-a1b2', req: 'r', tool: 'claude-code', depth: 'deep' }];
+  for (let i = 0; i < n; i += 1) {
+    events.push({ t: '2026-11-02T14:30:01+09:00', ev: 'node', id: `n${i}`, from: [i === n - 1 ? lastParent : `n${i + 1}`], stage: 'execute', status: 'done' });
+  }
+  return events;
+}
+
+test('validateRun handles a 10,000-node chain written in reverse order without stack overflow, and still finds a long cycle', () => {
+  let res;
+  assert.doesNotThrow(() => {
+    res = validateRun(reverseChainEvents(10000), { runId: '20261102-1430-a1b2' });
+  });
+  assert.equal(res.ok, true, res.errors.slice(0, 3).join('; '));
+
+  let cyc;
+  assert.doesNotThrow(() => {
+    cyc = validateRun(reverseChainEvents(10000, 'n0'), { runId: '20261102-1430-a1b2' });
+  });
+  assert.equal(cyc.ok, false);
+  assert.ok(cyc.errors.some((e) => /cycle/.test(e)), cyc.errors.slice(0, 3).join('; '));
+});
+
+test('check-run gives a normal result, not a crash, for a 10,000-node reverse chain', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gon-check-chain-'));
+  try {
+    const runDir = path.join(tmpRoot, '20261102-1430-a1b2');
+    fs.mkdirSync(runDir);
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), reverseChainEvents(10000).map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf8');
+    const res = spawnSync(process.execPath, [path.resolve('tools/check-run.mjs'), runDir], { encoding: 'utf8' });
+    assert.doesNotMatch(res.stderr, /RangeError|Maximum call stack|\n\s+at /);
+    assert.equal(res.status, 0, `stderr: ${res.stderr.slice(0, 300)}`);
+    assert.match(res.stdout, /^OK: 20261102-1430-a1b2/m);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('validateRun accepts good-run', () => {
   const { events } = parseEvents(readFixture('good-run'));
   const res = validateRun(events, { runId: '20261102-1430-a1b2' });

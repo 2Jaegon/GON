@@ -283,18 +283,29 @@ export function validateRun(events, opts = {}) {
     }
   }
 
+  // Iterative DFS (explicit stack): a long chain must not overflow the call stack.
+  // state: 1 = on the current path, 2 = fully explored.
   const state = new Map();
-  function hasCycle(nodeId) {
-    const st = state.get(nodeId);
-    if (st === 1) return true;
-    if (st === 2) return false;
-    state.set(nodeId, 1);
-    const parents = nodeParents.get(nodeId) || [];
-    for (const p of parents) {
+  function hasCycle(startId) {
+    if (state.get(startId) === 2) return false;
+    const stack = [{ id: startId, parents: nodeParents.get(startId) || [], next: 0 }];
+    state.set(startId, 1);
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      if (frame.next >= frame.parents.length) {
+        state.set(frame.id, 2);
+        stack.pop();
+        continue;
+      }
+      const p = frame.parents[frame.next];
+      frame.next += 1;
       if (p === 'main' || !declaredNodes.has(p)) continue;
-      if (hasCycle(p)) return true;
+      const st = state.get(p);
+      if (st === 1) return true;
+      if (st === 2) continue;
+      state.set(p, 1);
+      stack.push({ id: p, parents: nodeParents.get(p) || [], next: 0 });
     }
-    state.set(nodeId, 2);
     return false;
   }
 
