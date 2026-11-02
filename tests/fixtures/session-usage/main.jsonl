@@ -1,4 +1,4 @@
 {"type":"user","message":{"role":"user","content":"할 일 목록 CLI"}}
-{"type":"assistant","message":{"id":"msg_01AAA","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":700,"output_tokens":50}}}
+{"type":"assistant","message":{"id":"msg_01AAA","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":700,"output_tokens":10}}}
 {"type":"assistant","message":{"id":"msg_01AAA","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":700,"output_tokens":50}}}
 {"type":"assistant","message":{"id":"msg_02BBB","usage":{"input_tokens":50,"cache_creation_input_tokens":50,"cache_read_input_tokens":400,"output_tokens":30}}}

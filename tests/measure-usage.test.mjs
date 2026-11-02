@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import os from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { sumUsage } from '../tools/measure-usage.mjs';
 
 const USAGE_FIXTURES = path.resolve('tests/fixtures/session-usage');
@@ -11,12 +12,13 @@ test('sumUsage dedupes repeated message ids across files', () => {
   const mainText = fs.readFileSync(path.join(USAGE_FIXTURES, 'main.jsonl'), 'utf8');
   const subText = fs.readFileSync(path.join(USAGE_FIXTURES, 'subagent.jsonl'), 'utf8');
   const res = sumUsage([mainText, subText]);
-  // Unique message ids: msg_01AAA (100, 200, 700, 50), msg_02BBB (50, 50, 400, 30), msg_sub_01 (50, 150, 300, 40)
+  // msg_01AAA appears 3 times with output 10 (first), 50 (max), 20 (last, in subagent.jsonl).
+  // Totals: last-wins 20+30+40=90, first-wins 80, max 120 -> the rule is last-wins.
   assert.equal(res.messages, 3);
   assert.equal(res.input, 200);
   assert.equal(res.cacheWrite, 400);
   assert.equal(res.cacheRead, 1400);
-  assert.equal(res.output, 120);
+  assert.equal(res.output, 90);
   assert.equal(res.cacheReadRatio, 1400 / 2000);
 });
 
@@ -79,6 +81,48 @@ test('counts subagent file usage in addition to main via CLI directory recursion
   assert.equal(parsed.input, 200);
   assert.equal(parsed.cacheWrite, 400);
   assert.equal(parsed.cacheRead, 1400);
-  assert.equal(parsed.output, 120);
+  assert.equal(parsed.output, 90);
   assert.equal(parsed.cacheReadRatio, 0.7);
+});
+
+test('CLI dedupes across two files found by recursing a folder and ignores non-.jsonl files', () => {
+  const cli = path.resolve('tools/measure-usage.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gon-usage-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'a', 'z'), { recursive: true });
+    fs.copyFileSync(path.join(USAGE_FIXTURES, 'main.jsonl'), path.join(tmp, 'a', '1-main.jsonl'));
+    fs.copyFileSync(path.join(USAGE_FIXTURES, 'subagent.jsonl'), path.join(tmp, 'a', 'z', 'subagent.jsonl'));
+    fs.writeFileSync(path.join(tmp, 'a', 'notes.txt'), fs.readFileSync(path.join(USAGE_FIXTURES, 'subagent.jsonl')));
+    const parsed = JSON.parse(execFileSync(process.execPath, [cli, tmp], { encoding: 'utf8' }));
+    assert.equal(parsed.messages, 3);
+    assert.equal(parsed.output, 90);
+    assert.equal(parsed.cacheRead, 1400);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('CLI exits 2 with a stderr message, and prints no JSON, for a missing path, a link, a non-.jsonl file or a folder without .jsonl', () => {
+  const cli = path.resolve('tools/measure-usage.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gon-usage-bad-'));
+  try {
+    const txt = path.join(tmp, 'usage.txt');
+    fs.writeFileSync(txt, fs.readFileSync(path.join(USAGE_FIXTURES, 'main.jsonl')));
+    const emptyDir = path.join(tmp, 'empty');
+    fs.mkdirSync(emptyDir);
+    const link = path.join(tmp, 'link');
+    fs.symlinkSync(USAGE_FIXTURES, link, 'junction');
+
+    for (const target of [path.join(tmp, 'missing.jsonl'), link, txt, emptyDir]) {
+      const res = spawnSync(process.execPath, [cli, target], { encoding: 'utf8' });
+      assert.equal(res.status, 2, `${target}: expected exit 2, got ${res.status}`);
+      assert.match(res.stderr, /\S/, `${target}: expected a stderr message`);
+      assert.equal(res.stdout.trim(), '', `${target}: must not print JSON`);
+    }
+    // A bad target among good ones still fails.
+    const mixed = spawnSync(process.execPath, [cli, USAGE_FIXTURES, path.join(tmp, 'missing.jsonl')], { encoding: 'utf8' });
+    assert.equal(mixed.status, 2);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

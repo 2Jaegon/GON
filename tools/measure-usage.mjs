@@ -94,13 +94,25 @@ function collectJsonlFiles(targetPath) {
   }
   if (st.isDirectory()) {
     const out = [];
-    for (const entry of fs.readdirSync(resolved, { withFileTypes: true })) {
+    // Sorted so that last-wins dedupe across files does not depend on readdir order.
+    const entries = fs.readdirSync(resolved, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
       out.push(...collectJsonlFiles(path.join(resolved, entry.name)));
     }
     return out;
   }
   return [];
+}
+
+function describeBadTarget(targetPath) {
+  const resolved = path.resolve(targetPath);
+  if (!fs.existsSync(resolved)) return 'path not found';
+  const st = fs.lstatSync(resolved);
+  if (st.isSymbolicLink()) return 'links are not followed';
+  if (st.isFile() && !resolved.endsWith('.jsonl')) return 'not a .jsonl file';
+  if (!st.isFile() && !st.isDirectory()) return 'not a file or folder';
+  return null;
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
@@ -110,9 +122,20 @@ if (isMain) {
     console.error('Usage: node tools/measure-usage.mjs <file-or-dir>...');
     process.exit(1);
   }
+  // A bad target must fail loudly: all-zero JSON with exit 0 would look like a real measurement.
   const files = [];
   for (const t of targets) {
-    files.push(...collectJsonlFiles(t));
+    const problem = describeBadTarget(t);
+    if (problem) {
+      console.error(`Error: ${t}: ${problem}`);
+      process.exit(2);
+    }
+    const found = collectJsonlFiles(t);
+    if (found.length === 0) {
+      console.error(`Error: ${t}: no .jsonl files found`);
+      process.exit(2);
+    }
+    files.push(...found);
   }
   const texts = files.map((f) => fs.readFileSync(f, 'utf8'));
   const summary = sumUsage(texts);
