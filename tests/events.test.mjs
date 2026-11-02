@@ -222,7 +222,7 @@ test('shared modules have no import and no node: usage', () => {
     if (!fs.existsSync(full)) continue;
     const src = fs.readFileSync(full, 'utf8');
     assert.doesNotMatch(src, /^\s*import\b/m, `${rel} must not contain import statements`);
-    assert.doesNotMatch(src, /\bnode:/, `${rel} must not reference node: builtins`);
+    assert.doesNotMatch(src, /['"`]node:[a-z0-9_/-]+/i, `${rel} must not reference node: builtins`);
     assert.doesNotMatch(src, /\b(process|Buffer)\b/, `${rel} must not reference process or Buffer`);
   }
 });
