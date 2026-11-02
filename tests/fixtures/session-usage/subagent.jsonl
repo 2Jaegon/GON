@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"id":"msg_01AAA","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":700,"output_tokens":50}}}
+{"type":"assistant","message":{"id":"msg_sub_01","usage":{"input_tokens":50,"cache_creation_input_tokens":150,"cache_read_input_tokens":300,"output_tokens":40}}}

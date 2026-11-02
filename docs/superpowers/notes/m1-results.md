@@ -24,4 +24,20 @@
   - `gon`: always-on `~100 tok`, on-invoke `~2.5k tok`
   - `gon-expert`: always-on `~90 tok`, on-invoke `~530 tok`
 
+## Task 10 세션 기록 경로 확인 및 측정 도구 (`measure-usage.mjs`)
+- Claude Code 세션 기록 위치(실제 파일 구조 확인):
+  - 프로젝트 슬러그 폴더: `~/.claude/projects/<project-slug>/` (경로 구분자 `:`, `\`, `/`와 언더스코어 `_`, 한글 등 비ASCII 문자를 모두 `-`로 치환한 형태)
+  - 메인 세션 기록: `~/.claude/projects/<project-slug>/<session-uuid>.jsonl`
+  - 서브에이전트 기록: `~/.claude/projects/<project-slug>/<session-uuid>/subagents/agent-<agent-id>.jsonl`
+  - 합산 명령: `node tools/measure-usage.mjs ~/.claude/projects/<project-slug>/<session-uuid>.jsonl ~/.claude/projects/<project-slug>/<session-uuid>/subagents`
+- 깊이별 대화형 실측 표 (Task 10 Steps 3~7 대화형 세션에서 사용자 승인 클릭과 함께 측정 예정):
+
+| 구분 | 입력 (`input`) | 캐시 쓰기 (`cacheWrite`) | 캐시 읽기 (`cacheRead`) | 출력 (`output`) | 메시지 수 | 캐시 읽기 비율 (`cacheReadRatio`) | 단계 누락률 | 파싱 성공률 |
+|---|---|---|---|---|---|---|---|---|
+| 빠름 (`quick`) | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 |
+| 보통 (`normal`, §5.9 준수) | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 |
+| 보통 (`normal`, §5.9 위반 변형) | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 |
+| 깊게 (`deep`) | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 | 미측정 |
+
+
 
