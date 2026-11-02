@@ -148,6 +148,27 @@ test('validateRun never throws on deeply nested values (depth 100k) and rejects 
   assert.equal(tooMany.ok, false, 'from longer than 32 must be rejected');
 });
 
+test('validateRun requires t to be an ISO-8601 timestamp with time and offset', () => {
+  const start = (t) => ({ v: 1, t, ev: 'run.start', run: '20261102-1430-a1b2', req: 'r', tool: 'claude-code', depth: 'quick' });
+  for (const bad of ['1', '2026', '2026-11-02', 'Mon Nov 02 2026', '2026-11-02 14:30:00', '2026-11-02T14:30:00', '2026-13-02T14:30:00Z']) {
+    assert.equal(validateRun([start(bad)]).ok, false, `t=${bad} must be rejected`);
+  }
+  for (const good of ['2026-11-02T14:30:00+09:00', '2026-11-02T05:30:00.123Z', '2026-11-02T05:30:00Z']) {
+    const res = validateRun([start(good)]);
+    assert.equal(res.ok, true, `t=${good}: ${res.errors.join('; ')}`);
+  }
+});
+
+test('validateRun rejects the reserved node id main', () => {
+  const res = validateRun([
+    { v: 1, t: '2026-11-02T14:30:00+09:00', ev: 'run.start', run: '20261102-1430-a1b2', req: 'r', tool: 'claude-code', depth: 'quick' },
+    { t: '2026-11-02T14:30:01+09:00', ev: 'node', id: 'a', from: ['main'], stage: 'grill', status: 'done' },
+    { t: '2026-11-02T14:30:02+09:00', ev: 'node', id: 'main', from: ['a'], stage: 'plan', status: 'done' },
+  ]);
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.some((e) => /main/.test(e) && /reserved/.test(e)), res.errors.join('; '));
+});
+
 test('validateRun accepts good-run', () => {
   const { events } = parseEvents(readFixture('good-run'));
   const res = validateRun(events, { runId: '20261102-1430-a1b2' });

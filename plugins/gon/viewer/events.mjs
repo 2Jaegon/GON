@@ -8,6 +8,7 @@ const END_STATUSES = ['done', 'failed'];
 const VIAS = ['subagent', 'inline'];
 const STALL_MS = 10 * 60 * 1000;
 const MAX_FROM = 32;
+const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function isNodeRef(v) {
   return typeof v === 'string' && (v === 'main' || NODE_ID_RE.test(v));
@@ -156,7 +157,7 @@ export function validateRun(events, opts = {}) {
       continue;
     }
 
-    if (typeof ev.t !== 'string' || Number.isNaN(Date.parse(ev.t))) {
+    if (typeof ev.t !== 'string' || !ISO_TS_RE.test(ev.t) || Number.isNaN(Date.parse(ev.t))) {
       errors.push(`event[${i}]: invalid ISO timestamp t`);
     }
 
@@ -191,6 +192,10 @@ export function validateRun(events, opts = {}) {
       }
       if (typeof ev.id !== 'string' || !NODE_ID_RE.test(ev.id)) {
         errors.push(`event[${i}]: invalid node id ${show(ev.id)}`);
+        continue;
+      }
+      if (ev.id === 'main') {
+        errors.push(`event[${i}]: node id "main" is reserved for the virtual root`);
         continue;
       }
       if (!NODE_STATUSES.includes(ev.status)) {
