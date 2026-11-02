@@ -76,6 +76,7 @@ M2~M4(Codex, Antigravity·Gemini, 관찰 테스트)는 M1 결과를 보고 별�
 - Create: `package.json`, `.claude-plugin/marketplace.json`, `plugins/gon/.claude-plugin/plugin.json`, `README.md`(임시 한 줄), `plugins/gon/skills/gon/SKILL.md`(임시: name·description만), `docs/superpowers/notes/m1-results.md`
 - Move: `INSTALL.md` → `docs/ENV-SETUP.local.md` (전역 지침·훅 코드·개인 경로가 들어 있어 공개하면 안 된다)
 - Modify: `.gitignore` (`.gon/`, `.claude/`, `docs/ENV-SETUP.local.md` 추가)
+- Create: `.gitattributes` (`* text=auto eol=lf`, `tests/fixtures/** -text`) — 이 PC의 git이 줄바꿈을 자동 변환하므로, CRLF·BOM을 일부러 담은 시험 샘플이 바이트 그대로 보존되게 한다
 
 **Interfaces:**
 - Produces: 마켓플레이스 이름 `gon`, 플러그인 이름 `gon`(설치 표기 `gon@gon`). `npm test` = `node --test "tests/**/*.test.mjs"`. 스킬의 **실제 호출 이름**(`/gon` 또는 `/gon:gon`)은 Step 5에서 확정해 `m1-results.md`에 적고 Task 7·9가 쓴다.
