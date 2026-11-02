@@ -396,7 +396,9 @@ test('rejects links pointing outside (3 junction types: .md file link, run folde
 
     const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
 
-    // 1. Subdirectory junction inside run folder pointing to outsideDir (for .md file access via link)
+    // 1. Subdirectory junction inside run folder pointing to outsideDir. Since SAFE_OUT_RE allows no
+    //    sub-folders, `linked/leak.md` is now rejected by the regex; the flat-name link guard is covered by
+    //    the 'link guard' tests below.
     const subJunction = path.join(runDir, 'linked');
     fs.symlinkSync(outsideDir, subJunction, 'junction');
 
@@ -407,7 +409,7 @@ test('rejects links pointing outside (3 junction types: .md file link, run folde
 
     const srv = await startServer({ gonDir: ws.gonDir });
     try {
-      // Case 1: .md file through linked junction inside runDir
+      // Case 1: sub-folder path through a junction (stopped by SAFE_OUT_RE before the link guard)
       const res1 = await rawRequest(srv.port, {
         path: '/api/runs/20261102-1430-a1b2/file?path=linked/leak.md',
         headers: { 'x-gon-token': srv.token },
@@ -756,6 +758,91 @@ test('an events.jsonl over 4MB is left out of the list and its detail is 413, ke
       const detailRes = await rawRequest(srv.port, { path: `/api/runs/${bigId}`, headers: { 'x-gon-token': srv.token } });
       assert.equal(detailRes.status, 413);
       assert.ok(detailRes.body.length < 1024, `detail body is ${detailRes.body.length} bytes`);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+async function getFile(srv, name) {
+  return rawRequest(srv.port, {
+    path: `/api/runs/20261102-1430-a1b2/file?path=${encodeURIComponent(name)}`,
+    headers: { 'x-gon-token': srv.token },
+  });
+}
+
+// Creates a file symlink; returns false only when Windows refuses it for lack of privilege.
+function trySymlinkFile(target, link) {
+  try {
+    fs.symlinkSync(target, link, 'file');
+    return true;
+  } catch (err) {
+    if (err && (err.code === 'EPERM' || err.code === 'ENOTSUP')) return false;
+    throw err;
+  }
+}
+
+test('link guard: a junction named j.md pointing to an outside folder is rejected with 400', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const outsideDir = path.join(ws.root, 'outside-dir');
+    fs.mkdirSync(outsideDir);
+    fs.writeFileSync(path.join(outsideDir, 'secret.md'), 'JUNCTION_MD_SECRET', 'utf8');
+    // No privilege needed for a junction; if creation fails the test fails.
+    fs.symlinkSync(outsideDir, path.join(runDir, 'j.md'), 'junction');
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const res = await getFile(srv, 'j.md');
+      assert.equal(res.status, 400);
+      assert.doesNotMatch(res.body, /JUNCTION_MD_SECRET/);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('link guard: a file symlink sym.md pointing to an outside secret is rejected with 400 (skips only on EPERM)', async (t) => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const secret = path.join(ws.root, 'outside-secret.md');
+    fs.writeFileSync(secret, 'SYMLINK_MD_SECRET', 'utf8');
+    if (!trySymlinkFile(secret, path.join(runDir, 'sym.md'))) {
+      t.skip('file symlinks need Developer Mode or admin on this Windows machine (EPERM)');
+      return;
+    }
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const res = await getFile(srv, 'sym.md');
+      assert.equal(res.status, 400);
+      assert.doesNotMatch(res.body, /SYMLINK_MD_SECRET/);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('link guard: a symlink alias.md pointing to brief.md in the same run folder is rejected with 400 (skips only on EPERM)', async (t) => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    // Target stays inside the run folder, so only the link guard (not realpath + relative) can reject it.
+    if (!trySymlinkFile(path.join(runDir, 'brief.md'), path.join(runDir, 'alias.md'))) {
+      t.skip('file symlinks need Developer Mode or admin on this Windows machine (EPERM)');
+      return;
+    }
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const res = await getFile(srv, 'alias.md');
+      assert.equal(res.status, 400);
+      assert.doesNotMatch(res.body, /요구사항 요약/);
     } finally {
       await srv.close();
     }
