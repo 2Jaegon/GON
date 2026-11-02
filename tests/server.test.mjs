@@ -667,3 +667,33 @@ test('SSE emits change within 1.5s after events.jsonl is appended, sends heartbe
     ws.cleanup();
   }
 });
+
+test('/api/runs stays 200 with the good run listed when another run has a deeply nested (depth 100k) record line', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const badDir = path.join(ws.gonDir, '20261102-1431-dead');
+    fs.mkdirSync(badDir);
+    const deep = '['.repeat(100000) + ']'.repeat(100000);
+    fs.writeFileSync(
+      path.join(badDir, 'events.jsonl'),
+      '{"v":1,"t":"2026-11-02T14:31:00+09:00","ev":"run.start","run":"20261102-1431-dead","req":"r","tool":"claude-code","depth":"quick"}\n' +
+        `{"t":"2026-11-02T14:31:01+09:00","ev":"node","id":"n1","from":${deep},"stage":"grill","status":"running"}\n`,
+      'utf8',
+    );
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      const listRes = await rawRequest(srv.port, { path: '/api/runs', headers: { 'x-gon-token': srv.token } });
+      assert.equal(listRes.status, 200);
+      const runs = JSON.parse(listRes.body);
+      assert.ok(runs.some((r) => r.id === '20261102-1430-a1b2' && r.status === 'done'), listRes.body);
+
+      const detailRes = await rawRequest(srv.port, { path: '/api/runs/20261102-1431-dead', headers: { 'x-gon-token': srv.token } });
+      assert.notEqual(detailRes.status, 500);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});

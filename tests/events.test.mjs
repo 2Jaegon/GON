@@ -89,7 +89,7 @@ test('buildRun keeps retry ids separate', () => {
   assert.deepEqual(fe2.from, ['fe']);
 });
 
-test('buildRun is safe for ids like __proto__ and constructor', () => {
+test('buildRun is safe for ids like __proto__ and constructor (__proto__ fails NODE_ID_RE and is dropped)', () => {
   const events = [
     { v: 1, t: '2026-11-02T14:30:00+09:00', ev: 'run.start', run: '20261102-1430-a1b2', req: 'test', tool: 'claude-code', depth: 'quick' },
     { t: '2026-11-02T14:30:01+09:00', ev: 'node', id: '__proto__', from: ['main'], stage: 'grill', status: 'done', sum: 'pollute?' },
@@ -97,9 +97,55 @@ test('buildRun is safe for ids like __proto__ and constructor', () => {
   ];
   const run = buildRun('20261102-1430-a1b2', events);
   assert.equal(({}).sum, undefined);
-  assert.equal(run.nodes.length, 2);
-  assert.equal(run.nodes[0].id, '__proto__');
-  assert.equal(run.nodes[1].id, 'constructor');
+  assert.equal(run.nodes.length, 1);
+  assert.equal(run.nodes[0].id, 'constructor');
+});
+
+const DEEP_DEPTH = 100000;
+const DEEP_ARRAY_JSON = '['.repeat(DEEP_DEPTH) + ']'.repeat(DEEP_DEPTH);
+const HOSTILE_START = '{"v":1,"t":"2026-11-02T14:30:00+09:00","ev":"run.start","run":"20261102-1430-a1b2","req":"r","tool":"claude-code","depth":"quick"}';
+function hostileNodeLines() {
+  return [
+    `{"t":"2026-11-02T14:30:01+09:00","ev":"node","id":"n1","from":${DEEP_ARRAY_JSON},"stage":"grill","status":"running"}`,
+    `{"t":"2026-11-02T14:30:02+09:00","ev":"node","id":${DEEP_ARRAY_JSON},"from":["main"],"stage":${DEEP_ARRAY_JSON},"status":${DEEP_ARRAY_JSON},"via":${DEEP_ARRAY_JSON}}`,
+    `{"t":${DEEP_ARRAY_JSON},"ev":${DEEP_ARRAY_JSON},"run":${DEEP_ARRAY_JSON}}`,
+    `{"v":1,"t":"2026-11-02T14:30:03+09:00","ev":"run.start","run":${DEEP_ARRAY_JSON},"depth":${DEEP_ARRAY_JSON}}`,
+  ];
+}
+
+test('buildRun never throws on deeply nested values (depth 100k) and keeps only valid node refs in from and id', () => {
+  const { events } = parseEvents([HOSTILE_START, ...hostileNodeLines()].join('\n'));
+  assert.equal(events.length, 5);
+  let run;
+  assert.doesNotThrow(() => {
+    run = buildRun('20261102-1430-a1b2', events);
+  });
+  assert.deepEqual(run.nodes.map((n) => n.id), ['n1']);
+  assert.deepEqual(run.nodes[0].from, []);
+
+  const mixed = buildRun('20261102-1430-a1b2', [
+    { t: '2026-11-02T14:30:01+09:00', ev: 'node', id: 'n2', from: ['main', 7, ['a'], 'Bad Id', 'x'.repeat(65), 'ok-1'], stage: 'plan', status: 'done' },
+    { t: '2026-11-02T14:30:02+09:00', ev: 'node', id: 'n3', from: Array.from({ length: 40 }, (_, i) => `p${i}`), stage: 'plan', status: 'done' },
+    { t: '2026-11-02T14:30:03+09:00', ev: 'node', id: 'Bad Id', from: ['main'], stage: 'plan', status: 'done' },
+  ]);
+  assert.deepEqual(mixed.nodes.map((n) => n.id), ['n2', 'n3']);
+  assert.deepEqual(mixed.nodes[0].from, ['main', 'ok-1']);
+  assert.ok(mixed.nodes[1].from.length <= 32, `from must be capped at 32, got ${mixed.nodes[1].from.length}`);
+});
+
+test('validateRun never throws on deeply nested values (depth 100k) and rejects them', () => {
+  const { events } = parseEvents([HOSTILE_START, ...hostileNodeLines()].join('\n'));
+  let res;
+  assert.doesNotThrow(() => {
+    res = validateRun(events, { runId: '20261102-1430-a1b2' });
+  });
+  assert.equal(res.ok, false);
+
+  const tooMany = validateRun([
+    JSON.parse(HOSTILE_START),
+    { t: '2026-11-02T14:30:01+09:00', ev: 'node', id: 'n1', from: Array.from({ length: 33 }, () => 'main'), stage: 'grill', status: 'running' },
+  ]);
+  assert.equal(tooMany.ok, false, 'from longer than 32 must be rejected');
 });
 
 test('validateRun accepts good-run', () => {
@@ -206,6 +252,22 @@ test('check-run CLI validates good-run, rejects broken/FFFD runs, and warns on s
     );
     const warnOut = execFileSync(process.execPath, [cli, secretDir], { encoding: 'utf8' });
     assert.match(warnOut, /WARN/i);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('check-run exits 1 with ERROR lines, not a stack trace, on deeply nested values (depth 100k)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gon-check-deep-'));
+  try {
+    const runDir = path.join(tmpRoot, '20261102-1430-a1b2');
+    fs.mkdirSync(runDir);
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), [HOSTILE_START, ...hostileNodeLines()].join('\n') + '\n', 'utf8');
+    const res = spawnSync(process.execPath, [path.resolve('tools/check-run.mjs'), runDir], { encoding: 'utf8' });
+    assert.equal(res.status, 1, `expected exit 1, got ${res.status}; stderr: ${res.stderr.slice(0, 300)}`);
+    assert.match(res.stderr, /^ERROR: /m);
+    assert.doesNotMatch(res.stderr, /RangeError|\n\s+at /);
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }

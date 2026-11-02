@@ -261,20 +261,25 @@ export async function startServer(opts = {}) {
       if (rawPath === '/api/runs' && rawQuery === '') {
         const summaries = [];
         for (const runId of gonCheck.runIds) {
-          const evPath = path.join(gonDir, runId, 'events.jsonl');
-          const text = fs.readFileSync(evPath, 'utf8');
-          const { events } = parseEvents(text);
-          const run = buildRun(runId, events);
-          summaries.push({
-            id: run.id,
-            req: run.req,
-            tool: run.tool,
-            depth: run.depth,
-            status: runStatus(run),
-            startedAt: run.startedAt,
-            endedAt: run.endedAt,
-            nodeCount: run.nodes.length,
-          });
+          // One unreadable or hostile run must not take down the whole list: skip it.
+          try {
+            const evPath = path.join(gonDir, runId, 'events.jsonl');
+            const text = fs.readFileSync(evPath, 'utf8');
+            const { events } = parseEvents(text);
+            const run = buildRun(runId, events);
+            summaries.push({
+              id: run.id,
+              req: run.req,
+              tool: run.tool,
+              depth: run.depth,
+              status: runStatus(run),
+              startedAt: run.startedAt,
+              endedAt: run.endedAt,
+              nodeCount: run.nodes.length,
+            });
+          } catch {
+            // skipped
+          }
         }
         sendJson(res, 200, summaries);
         return;

@@ -99,7 +99,13 @@ if (isMain) {
     console.error('Usage: node tools/check-run.mjs <runDir>');
     process.exit(1);
   }
-  const result = checkRunDir(target);
+  let result;
+  try {
+    result = checkRunDir(target);
+  } catch (err) {
+    console.error(`ERROR: check-run failed: ${err?.message || 'unknown error'}`);
+    process.exit(1);
+  }
   for (const w of result.warnings) {
     console.log(w);
   }

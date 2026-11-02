@@ -7,6 +7,22 @@ const NODE_STATUSES = ['running', 'done', 'failed', 'skipped'];
 const END_STATUSES = ['done', 'failed'];
 const VIAS = ['subagent', 'inline'];
 const STALL_MS = 10 * 60 * 1000;
+const MAX_FROM = 32;
+
+function isNodeRef(v) {
+  return typeof v === 'string' && (v === 'main' || NODE_ID_RE.test(v));
+}
+
+function cleanFrom(from) {
+  return Array.isArray(from) ? from.filter(isNodeRef).slice(0, MAX_FROM) : [];
+}
+
+// Formats an untrusted value for an error message without String() recursion.
+function show(v) {
+  if (typeof v === 'string') return JSON.stringify(v.slice(0, 80));
+  if (typeof v === 'number' || typeof v === 'boolean' || v === null || v === undefined) return String(v);
+  return Array.isArray(v) ? '<array>' : `<${typeof v}>`;
+}
 
 export function parseEvents(text) {
   if (typeof text !== 'string' || text.length === 0) {
@@ -72,12 +88,12 @@ export function buildRun(runId, events) {
       continue;
     }
 
-    if (ev.ev === 'node' && typeof ev.id === 'string' && ev.id.length > 0) {
+    if (ev.ev === 'node' && typeof ev.id === 'string' && NODE_ID_RE.test(ev.id)) {
       let node = nodeMap.get(ev.id);
       if (!node) {
         node = {
           id: ev.id,
-          from: Array.isArray(ev.from) ? ev.from.map(String) : [],
+          from: cleanFrom(ev.from),
           stage: typeof ev.stage === 'string' ? ev.stage : '',
           status: typeof ev.status === 'string' ? ev.status : 'running',
           startedAt: t,
@@ -85,8 +101,8 @@ export function buildRun(runId, events) {
         };
         nodeMap.set(ev.id, node);
       } else {
-        if (node.from.length === 0 && Array.isArray(ev.from)) {
-          node.from = ev.from.map(String);
+        if (node.from.length === 0) {
+          node.from = cleanFrom(ev.from);
         }
         if (typeof ev.stage === 'string') node.stage = ev.stage;
         if (typeof ev.status === 'string') node.status = ev.status;
@@ -124,8 +140,8 @@ export function validateRun(events, opts = {}) {
     return { ok: false, errors: ['events must be a non-empty array'] };
   }
 
-  if (opts?.runId !== undefined && !RUN_ID_RE.test(String(opts.runId))) {
-    errors.push(`invalid opts.runId: ${opts.runId}`);
+  if (opts?.runId !== undefined && (typeof opts.runId !== 'string' || !RUN_ID_RE.test(opts.runId))) {
+    errors.push(`invalid opts.runId: ${show(opts.runId)}`);
   }
 
   const declaredNodes = new Set();
@@ -153,9 +169,9 @@ export function validateRun(events, opts = {}) {
         errors.push(`event[${i}]: run.start requires v === 1`);
       }
       if (typeof ev.run !== 'string' || !RUN_ID_RE.test(ev.run)) {
-        errors.push(`event[${i}]: invalid run id "${ev.run}"`);
+        errors.push(`event[${i}]: invalid run id ${show(ev.run)}`);
       } else if (opts?.runId !== undefined && ev.run !== opts.runId) {
-        errors.push(`event[${i}]: run "${ev.run}" does not match folder runId "${opts.runId}"`);
+        errors.push(`event[${i}]: run ${show(ev.run)} does not match folder runId ${show(opts.runId)}`);
       }
       if (typeof ev.req !== 'string' || ev.req.trim().length === 0 || ev.req.length > 2000) {
         errors.push(`event[${i}]: req must be a non-empty string <= 2000 chars`);
@@ -164,7 +180,7 @@ export function validateRun(events, opts = {}) {
         errors.push(`event[${i}]: tool must be a non-empty string`);
       }
       if (!DEPTHS.includes(ev.depth)) {
-        errors.push(`event[${i}]: depth "${ev.depth}" must be one of ${DEPTHS.join(', ')}`);
+        errors.push(`event[${i}]: depth ${show(ev.depth)} must be one of ${DEPTHS.join(', ')}`);
       }
     } else if (ev.ev === 'node') {
       if (!seenStart) {
@@ -174,11 +190,11 @@ export function validateRun(events, opts = {}) {
         errors.push(`event[${i}]: only run.start may contain v`);
       }
       if (typeof ev.id !== 'string' || !NODE_ID_RE.test(ev.id)) {
-        errors.push(`event[${i}]: invalid node id "${ev.id}"`);
+        errors.push(`event[${i}]: invalid node id ${show(ev.id)}`);
         continue;
       }
       if (!NODE_STATUSES.includes(ev.status)) {
-        errors.push(`event[${i}]: invalid node status "${ev.status}"`);
+        errors.push(`event[${i}]: invalid node status ${show(ev.status)}`);
       }
 
       const isFirst = !declaredNodes.has(ev.id);
@@ -193,12 +209,12 @@ export function validateRun(events, opts = {}) {
       }
 
       if (ev.stage !== undefined && !STAGES.includes(ev.stage)) {
-        errors.push(`event[${i}]: invalid stage "${ev.stage}"`);
+        errors.push(`event[${i}]: invalid stage ${show(ev.stage)}`);
       }
 
       if (ev.from !== undefined) {
-        if (!Array.isArray(ev.from) || ev.from.length === 0 || !ev.from.every((p) => typeof p === 'string' && p.length > 0)) {
-          errors.push(`event[${i}]: from must be a non-empty string[]`);
+        if (!Array.isArray(ev.from) || ev.from.length === 0 || ev.from.length > MAX_FROM || !ev.from.every(isNodeRef)) {
+          errors.push(`event[${i}]: from must be 1..${MAX_FROM} node ids or "main"`);
         } else {
           for (const parent of ev.from) {
             if (parent === ev.id) {
@@ -212,7 +228,7 @@ export function validateRun(events, opts = {}) {
       }
 
       if (ev.via !== undefined && !VIAS.includes(ev.via)) {
-        errors.push(`event[${i}]: invalid via "${ev.via}"`);
+        errors.push(`event[${i}]: invalid via ${show(ev.via)}`);
       }
       if (ev.fallback !== undefined && typeof ev.fallback !== 'boolean') {
         errors.push(`event[${i}]: fallback must be boolean`);
@@ -245,10 +261,10 @@ export function validateRun(events, opts = {}) {
         errors.push(`event[${i}]: only run.start may contain v`);
       }
       if (!END_STATUSES.includes(ev.status)) {
-        errors.push(`event[${i}]: invalid run.end status "${ev.status}"`);
+        errors.push(`event[${i}]: invalid run.end status ${show(ev.status)}`);
       }
     } else {
-      errors.push(`event[${i}]: unknown ev "${ev.ev}"`);
+      errors.push(`event[${i}]: unknown ev ${show(ev.ev)}`);
     }
   }
 
