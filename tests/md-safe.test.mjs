@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { renderMarkdown } from '../plugins/gon/viewer/md-safe.mjs';
 
 test('escapes <script>, <img onerror> and event-handler attributes', () => {
@@ -94,14 +96,45 @@ test('finishes 1MB of text within 1 second and 100000 repetitions of "[a](" with
 });
 
 test('returns escaped original text when rendering throws', () => {
-  const badInput = {
-    toString() {
-      return '<script>alert(1)</script>';
-    },
+  // Make the renderer fail from the outside (no test hook in shipped code): String.prototype.split throws.
+  const originalSplit = String.prototype.split;
+  let out;
+  String.prototype.split = function splitThatThrows() {
+    throw new Error('injected failure');
   };
-  const out = renderMarkdown('<script>alert("fallback")</script>', { _forceThrow: true });
+  try {
+    out = renderMarkdown('<script>alert("fallback")</script>');
+  } finally {
+    String.prototype.split = originalSplit;
+  }
   assert.equal(out, '<pre>&lt;script&gt;alert(&quot;fallback&quot;)&lt;/script&gt;</pre>');
-  assert.ok(badInput);
+});
+
+test('md-safe.mjs ships no test-only switch', () => {
+  const src = fs.readFileSync(path.resolve('plugins/gon/viewer/md-safe.mjs'), 'utf8');
+  assert.doesNotMatch(src, /_forceThrow|opts\._/);
+});
+
+test('a link followed by a parenthetical keeps both the link and the rest of the text', () => {
+  const out = renderMarkdown('See [docs](https://a.com/x) for more (v2) details.');
+  assert.match(out, /<a href="https:\/\/a\.com\/x" rel="noopener noreferrer" target="_blank">docs<\/a>/);
+  assert.match(out, / for more \(v2\) details\./);
+});
+
+test('a URL with one level of balanced parentheses stays one link', () => {
+  const out = renderMarkdown('[w](https://a.com/a_(b)) end');
+  assert.match(out, /<a href="https:\/\/a\.com\/a_\(b\)" rel="noopener noreferrer" target="_blank">w<\/a>/);
+  assert.match(out, / end<\/p>$/);
+});
+
+test('link parsing stays fast on 100000 repetitions of "[a](" followed by ")" and of "[a](x(" ', () => {
+  for (const input of ['[a]('.repeat(100000) + ')', '[a](x('.repeat(100000) + '))', `[a](${'x'.repeat(1999)} `.repeat(500) + ')']) {
+    const t0 = performance.now();
+    const out = renderMarkdown(input);
+    const elapsed = performance.now() - t0;
+    assert.ok(out.length > 0);
+    assert.ok(elapsed < 1000, `took ${elapsed.toFixed(1)}ms`);
+  }
 });
 
 test('renders unicode, emoji and U+202E unchanged as text while stripping bidi/control chars from displayed link host', () => {

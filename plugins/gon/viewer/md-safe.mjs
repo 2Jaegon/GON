@@ -9,7 +9,9 @@ export function escapeHtml(str) {
 
 const CTRL_AND_BIDI_RE = /[\u0000-\u0020\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g;
 const UNSAFE_URL_CHAR_RE = /[\u0000-\u0020\u007F"'<>\\]/;
-const TOKEN_INLINE_RE = /`([^`\r\n]{1,1000})`|(!?)\[([^\[\]\r\n]{1,500})\]\(([^\[\r\n]{1,2000})\)/g;
+// Link URL: no parens except one balanced level, so `[a](u) tail (note)` ends at the first `)`.
+// The two alternatives start with disjoint characters, which keeps matching linear (no ReDoS).
+const TOKEN_INLINE_RE = /`([^`\r\n]{1,1000})`|(!?)\[([^\[\]\r\n]{1,500})\]\(((?:[^()\[\]\r\n]|\([^()\[\]\r\n]{0,2000}\)){1,2000})\)/g;
 
 function renderSafeLink(label, rawUrl) {
   const trimmed = rawUrl.trim();
@@ -80,11 +82,8 @@ function renderInline(line) {
   return result;
 }
 
-export function renderMarkdown(src, opts = {}) {
+export function renderMarkdown(src) {
   try {
-    if (opts && opts._forceThrow) {
-      throw new Error('Forced throw for test');
-    }
     if (typeof src !== 'string') {
       return `<pre>${escapeHtml(src)}</pre>`;
     }
