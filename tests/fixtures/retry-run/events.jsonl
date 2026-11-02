@@ -1,0 +1,6 @@
+{"v":1,"t":"2026-11-02T14:30:00+09:00","ev":"run.start","run":"20261102-1430-b2c3","req":"재시도 테스트","tool":"claude-code","depth":"normal"}
+{"t":"2026-11-02T14:30:05+09:00","ev":"node","id":"fe","from":["main"],"stage":"execute","status":"running"}
+{"t":"2026-11-02T14:31:00+09:00","ev":"node","id":"fe","status":"failed","sum":"시간 초과"}
+{"t":"2026-11-02T14:31:05+09:00","ev":"node","id":"fe-2","from":["fe"],"stage":"execute","status":"running"}
+{"t":"2026-11-02T14:32:00+09:00","ev":"node","id":"fe-2","status":"done","sum":"재시도 성공"}
+{"t":"2026-11-02T14:32:05+09:00","ev":"run.end","status":"done"}

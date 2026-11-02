@@ -1,0 +1,3 @@
+﻿{"v":1,"t":"2026-11-02T14:30:00+09:00","ev":"run.start","run":"20261102-1430-d4e5","req":"CRLF BOM 테스트","tool":"claude-code","depth":"quick"}
+﻿{"t":"2026-11-02T14:30:05+09:00","ev":"node","id":"interview","from":["main"],"stage":"grill","status":"done","sum":"요약 완료"}
+{"t":"2026-11-02T14:30:10+09:00","ev":"node","id":"plan

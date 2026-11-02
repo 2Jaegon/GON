@@ -1,0 +1,3 @@
+{"v":1,"t":"2026-11-02T14:30:00+09:00","ev":"run.start","run":"20261102-1430-c3d4","req":"순환 참조 테스트","tool":"claude-code","depth":"normal"}
+{"t":"2026-11-02T14:30:05+09:00","ev":"node","id":"alpha","from":["beta"],"stage":"plan","status":"done"}
+{"t":"2026-11-02T14:30:10+09:00","ev":"node","id":"beta","from":["alpha"],"stage":"check","status":"done"}

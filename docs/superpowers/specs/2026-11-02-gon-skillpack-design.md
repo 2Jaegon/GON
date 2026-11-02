@@ -143,7 +143,7 @@ gon/ (공개 저장소 2Jaegon/Gon)
 {"t":"2026-11-02T14:38:10+09:00","ev":"node","id":"fe","status":"done","sum":"화면 5개, 주문 3단계","out":"fe.md"}
 {"t":"2026-11-02T14:39:01+09:00","ev":"run.end","status":"done"}
 ```
-필드: `ev` ∈ `run.start | node | run.end`, `status` ∈ `running | done | failed | skipped`, `via` ∈ `subagent | inline`(서브에이전트가 없는 도구에서는 한 AI가 역할을 차례로 맡고 `inline`으로 표시, 평가자가 자기 글을 평가하는 편향이 있음을 결과에 밝힌다), `fallback`: 대체 카드를 썼으면 `true`.
+필드: `ev` ∈ `run.start | node | run.end`, `status`(노드) ∈ `running | done | failed | skipped`, `run.end.status` ∈ `done | failed`, `stage` ∈ `grill | plan | check | compose | execute | lead`, `depth`(기록 값) ∈ `quick | normal | deep`(사용자에게는 빠름/보통/깊게로 표시), `via` ∈ `subagent | inline`(서브에이전트가 없는 도구에서는 한 AI가 역할을 차례로 맡고 `inline`으로 표시, 평가자가 자기 글을 평가하는 편향이 있음을 결과에 밝힌다), `fallback`: boolean(대체 카드를 썼으면 `true`), `files`: string[](바꾼 프로젝트 상대 경로 목록). `run.start`만 `v: 1`을 가지며, `run` id 형식은 `^\d{8}-\d{4}-[0-9a-f]{4}$`(폴더 이름과 일치해야 함), 노드 `id` 형식은 `^[a-z0-9][a-z0-9_-]{0,63}$`이다.
 
 점을 눌렀을 때 패널에는 한 일(`sum`), 단계, 상태, 소요 시간, 연결된 점, 산출물(`out` 파일 내용)을 보여 준다.
 
