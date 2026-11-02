@@ -1,5 +1,7 @@
 export const RUN_ID_RE = /^\d{8}-\d{4}-[0-9a-f]{4}$/;
 export const NODE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+// The one rule for a node's `out` file name: a flat .md file inside the run folder.
+export const SAFE_OUT_RE = /^[\w가-힣 ._-]+\.md$/;
 export const DEPTHS = ['quick', 'normal', 'deep'];
 export const STAGES = ['grill', 'plan', 'check', 'compose', 'execute', 'lead'];
 

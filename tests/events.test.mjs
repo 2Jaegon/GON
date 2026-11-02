@@ -294,6 +294,22 @@ test('check-run exits 1 with ERROR lines, not a stack trace, on deeply nested va
   }
 });
 
+test('one out-path rule: only events.mjs defines SAFE_OUT_RE; server, app and check-run import it', async () => {
+  const read = (p) => fs.readFileSync(path.resolve(p), 'utf8');
+  const eventsSrc = read('plugins/gon/viewer/events.mjs');
+  assert.match(eventsSrc, /^export const SAFE_OUT_RE = \//m);
+  for (const p of ['plugins/gon/viewer/server.mjs', 'plugins/gon/viewer/app.js', 'tools/check-run.mjs']) {
+    const src = read(p);
+    assert.doesNotMatch(src, /SAFE_OUT_RE\s*=/, `${p} must not define its own SAFE_OUT_RE`);
+    assert.doesNotMatch(src, /\\\.md\$\//, `${p} must not contain another .md path regex literal`);
+    assert.match(src, /import\s*\{[^}]*\bSAFE_OUT_RE\b[^}]*\}\s*from\s*'[^']*events\.mjs'/, `${p} must import SAFE_OUT_RE from events.mjs`);
+  }
+
+  const { SAFE_OUT_RE } = await import('../plugins/gon/viewer/events.mjs');
+  for (const ok of ['brief.md', '한글 산출물.md', 'fe-2_v1.md']) assert.ok(SAFE_OUT_RE.test(ok), ok);
+  for (const bad of ['sub/a.md', '../a.md', 'a.txt', 'a(1).md', 'C:a.md', '日本.md']) assert.ok(!SAFE_OUT_RE.test(bad), bad);
+});
+
 test('shared modules have no import and no node: usage', () => {
   const sharedFiles = [
     'plugins/gon/viewer/events.mjs',

@@ -1,7 +1,7 @@
 import { layoutRuns } from './graph-layout.mjs';
 import { renderMarkdown } from './md-safe.mjs';
+import { SAFE_OUT_RE } from './events.mjs';
 
-const SAFE_OUT_RE = /^[\w가-힣 ._-]+\.md$/;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TRUNCATE_LIMIT = 120;
 

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { RUN_ID_RE, parseEvents, buildRun, runStatus } from './events.mjs';
+import { RUN_ID_RE, SAFE_OUT_RE, parseEvents, buildRun, runStatus } from './events.mjs';
 
 const VIEWER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -30,7 +30,6 @@ const STATIC_MAP = new Map([
   ['/md-safe.mjs', { file: 'md-safe.mjs', type: 'text/javascript; charset=utf-8' }],
 ]);
 
-const SAFE_REL_MD_RE = /^[\p{L}\p{N} ._-]+(?:\/[\p{L}\p{N} ._-]+)*\.md$/u;
 const WIN_RESERVED_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 const ENCODED_TRAVERSAL_RE = /%(?:2e|2f|5c|00|25)/i;
 
@@ -152,7 +151,7 @@ function validateSafeMdPath(runDir, rawQuery) {
 
   const rel = allPaths[0];
   if (!rel || typeof rel !== 'string') return null;
-  if (!SAFE_REL_MD_RE.test(rel)) return null;
+  if (!SAFE_OUT_RE.test(rel)) return null;
 
   // Verify single-decode stability
   try {

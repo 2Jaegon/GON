@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseEvents, buildRun, validateRun } from '../plugins/gon/viewer/events.mjs';
+import { SAFE_OUT_RE, parseEvents, buildRun, validateRun } from '../plugins/gon/viewer/events.mjs';
 
 const SECRET_PATTERNS = [
   { name: 'OpenAI/API key (sk-)', re: /\bsk-[A-Za-z0-9_-]{8,}/ },
@@ -66,8 +66,8 @@ export function checkRunDir(runDir) {
   const run = buildRun(runId, events);
   for (const node of run.nodes) {
     if (node.out !== undefined) {
-      if (!isSafeRelPath(node.out) || !node.out.endsWith('.md')) {
-        errors.push(`node "${node.id}": out "${node.out}" must be a relative .md path inside runDir`);
+      if (!SAFE_OUT_RE.test(node.out)) {
+        errors.push(`node "${node.id}": out "${node.out}" must be a flat .md file name in runDir (SAFE_OUT_RE)`);
       } else {
         const outFull = path.resolve(resolvedRunDir, node.out);
         const rel = path.relative(resolvedRunDir, outFull);
