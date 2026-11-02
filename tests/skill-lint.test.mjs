@@ -107,6 +107,30 @@ test('required rule sentences exist in SKILL.md, tools/claude.md, cards and gon-
   assert.match(combinedServerGuide, /옮겨 적지/);
 });
 
+test('PowerShell append snippet uses a literal single-quoted here-string and the spec no longer prescribes Add-Content', () => {
+  const skillText = fs.readFileSync(path.join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  const block = /^```powershell\r?\n([\s\S]*?)^```/m.exec(skillText);
+  assert.ok(block, 'SKILL.md must contain a ```powershell append snippet');
+  const snippet = block[1];
+  assert.match(snippet, /@'\r?\n/, 'snippet must open a single-quoted here-string');
+  assert.match(snippet, /^'@/m, "closing '@ must be at column 0");
+  assert.doesNotMatch(snippet, /@"/, 'snippet must not use an expanding here-string');
+  assert.match(snippet, /\[IO\.File\]::AppendAllText/);
+  assert.match(snippet, /\[Text\.UTF8Encoding\]::new\(\$false\)/);
+  for (const banned of ['Add-Content', '>>', 'Out-File']) {
+    assert.ok(!snippet.includes(banned), `snippet must not contain ${banned}`);
+  }
+
+  const specText = fs.readFileSync(path.resolve('docs/superpowers/specs/2026-11-02-gon-skillpack-design.md'), 'utf8');
+  assert.ok(!specText.includes('Add-Content'), 'spec must not recommend Add-Content');
+  assert.match(specText, /PowerShell[^\n]*@'/, "spec §5.3 must describe the single-quoted here-string");
+});
+
+test('gon-expert forbids installs and network access without approval', () => {
+  const text = fs.readFileSync(path.join(AGENTS_DIR, 'gon-expert.md'), 'utf8');
+  assert.match(text, /^\d+\. 승인 없이 패키지 설치·네트워크 접속을 하지 않는다/m);
+});
+
 test('relative links in SKILL.md and stages.md resolve to existing files', () => {
   for (const fileName of ['SKILL.md', 'stages.md']) {
     const filePath = path.join(SKILL_DIR, fileName);

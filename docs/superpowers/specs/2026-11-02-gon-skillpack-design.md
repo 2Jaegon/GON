@@ -132,7 +132,7 @@ gon/ (공개 저장소 2Jaegon/Gon)
 - 실시간 정밀도는 단계 단위다. 전문가 점 4개가 함께 켜졌다 함께 꺼진다.
 - 메인 점은 파일이 없는 가상 루트다. 각 요청의 첫 노드가 `from:["main"]`을 가진다. `run.end` 이후 그 가지를 흐리게 표시하고, 쌓는 순서는 폴더 이름(시각) 순이다.
 - 재시도는 새 id(`fe-2`)로 남긴다. `running`이 10분 넘게 그대로면 화면이 "멈춤?"으로 표시한다.
-- 이어 쓰기는 OS별 셸(bash `cat >> f <<'EOF'`, PowerShell `Add-Content` + 문자 그대로 here-string)로 한다. 별도 스크립트는 두지 않는다.
+- 이어 쓰기는 OS별 셸(bash `cat >> f <<'EOF'`, PowerShell 작은따옴표 here-string `@'`…`'@`(닫는 `'@`는 줄 맨 앞) + `[IO.File]::AppendAllText(<경로>, <글>, [Text.UTF8Encoding]::new($false))`로 BOM 없이)로 한다. 큰따옴표 문자열은 기록 값 안의 `$(…)`를 실행하므로 쓰지 않는다. 별도 스크립트는 두지 않는다.
 
 ```jsonl
 {"v":1,"t":"2026-11-02T14:30:05+09:00","ev":"run.start","run":"20261102-1430-a1b2","req":"동네 반찬 구독 앱 만들고 싶어","tool":"claude-code","depth":"normal"}

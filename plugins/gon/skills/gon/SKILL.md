@@ -46,7 +46,14 @@ description: 사용자가 명시적으로 /gon (또는 /gon:gon) 또는 "gon으�
   - `{"t":"<ISO8601>","ev":"run.end","status":"done"}`
 - 이어 쓰기 방법:
   - bash: `cat >> .gon/<run_id>/events.jsonl <<'EOF'`
-  - PowerShell: `[IO.File]::AppendAllText('<경로>', "<한줄JSON>`n", [Text.UTF8Encoding]::new($false))` 한 가지만 쓰며, `>>`, `Out-File`, 인코딩 없는 `Add-Content`는 BOM·인코딩 깨짐을 유발하므로 금지한다.
+  - PowerShell: 아래 형태 한 가지만 쓴다. 작은따옴표 here-string(`@'`…`'@`)이라 기록 값 안의 `$(…)`·`$env:`·백틱이 실행되지 않고 글자 그대로 남는다. 닫는 `'@`는 줄 맨 앞(들여쓰기 없음)에 둔다. `>>`, `Out-File`, 인코딩 없는 `Add-Content`, 큰따옴표 문자열은 BOM·인코딩 깨짐·값 실행을 일으키므로 금지한다.
+
+```powershell
+$lines = @'
+<한줄JSON, 여러 줄이면 줄마다 하나>
+'@
+[IO.File]::AppendAllText('<경로>', $lines + [char]10, [Text.UTF8Encoding]::new($false))
+```
 
 ## 7. 프롬프트 캐싱 배치 및 그래프 화면 실행
 - 전문가 하위 작업을 부를 때는 고정 지시를 앞에 두고, 바뀌는 값(`[카드 경로]`, `[brief 경로]`, `[맡을 파일]`, `[역할]`, `[산출물 경로]`)은 지시 맨 끝에 경로로만 전달한다.
