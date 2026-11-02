@@ -2,4 +2,10 @@
 .superpowers/
 
 # 로컬 전용 Claude Code 설정
-.claude/settings.local.json
+.claude/
+
+# Gon 실행 기록 폴더
+.gon/
+
+# 개인 PC 환경 설정 안내 (공개 제외)
+docs/ENV-SETUP.local.md

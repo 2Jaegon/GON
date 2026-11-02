@@ -1,0 +1,14 @@
+{
+  "name": "gon",
+  "description": "Gon 스킬팩 마켓플레이스 — 한 줄 아이디어를 7단계 전문가 흐름과 읽기 전용 그래프 화면으로 수행합니다.",
+  "owner": {
+    "name": "2Jaegon"
+  },
+  "plugins": [
+    {
+      "name": "gon",
+      "source": "./plugins/gon",
+      "description": "한 줄 아이디어를 질문·기획·승인·전문가 병렬 실행·검증 7단계로 수행하고 그래프 화면으로 보여주는 스킬팩"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "gon",
+  "description": "한 줄 아이디어를 질문·기획·승인·전문가 병렬 실행·검증 7단계로 수행하고 그래프 화면으로 보여주는 스킬팩",
+  "version": "0.1.0",
+  "author": {
+    "name": "2Jaegon"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/2Jaegon/Gon"
+}
