@@ -160,23 +160,16 @@ function validateSafeMdPath(runDir, rawQuery) {
     return null;
   }
 
-  const segments = rel.split('/');
-  for (const seg of segments) {
-    if (!seg || seg === '.' || seg === '..' || seg.includes('..')) return null;
-    if (seg.endsWith('.') || seg.endsWith(' ')) return null;
-    const stem = seg.split('.')[0];
-    if (WIN_RESERVED_RE.test(stem)) return null;
-  }
+  // SAFE_OUT_RE allows a single flat name ending in ".md", so there are no segments to walk.
+  if (rel.includes('..')) return null;
+  if (WIN_RESERVED_RE.test(rel.split('.')[0])) return null;
 
   try {
     const realRunDir = fs.realpathSync(runDir);
-    let current = realRunDir;
-    for (const seg of segments) {
-      current = path.join(current, seg);
-      if (!fs.existsSync(current)) return null;
-      if (isLinkOrJunction(current)) return null;
-    }
-    const realTarget = fs.realpathSync(current);
+    const candidate = path.join(realRunDir, rel);
+    if (!fs.existsSync(candidate)) return null;
+    if (isLinkOrJunction(candidate)) return null;
+    const realTarget = fs.realpathSync(candidate);
     const relFromRun = path.relative(realRunDir, realTarget);
     if (!relFromRun || relFromRun.startsWith('..') || path.isAbsolute(relFromRun)) {
       return null;
