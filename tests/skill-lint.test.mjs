@@ -203,3 +203,35 @@ describe('Task 8 card and gon-expert constraints', () => {
     assert.match(text, /프로젝트 폴더 밖·전역 설정·`?\.env`? 같은 비밀값 파일은 건드리지 않고, 기록에 키·비밀번호를 쓰지 않는다/);
   });
 });
+
+const readSkill = (rel) => fs.readFileSync(path.join(SKILL_DIR, rel), 'utf8');
+
+describe('wave C: skill content rules', () => {
+  test('C1 borrowed stage skills lend only their method and Gon rules win', () => {
+    const skill = readSkill('SKILL.md');
+    assert.match(skill, /담당 스킬은 방법\(질문법·검토법\)만 빌리고, 아래 Gon 규칙이 그 스킬의 지시보다 항상 우선한다\./);
+    assert.match(skill, /산출물은 `\.gon\/<run_id>\/` 안에만 쓴다\(`docs\/superpowers\/specs` 같은 다른 경로에 쓰거나 커밋하지 않는다\)\./);
+    assert.match(skill, /4단계 점검\(승인\) 게이트는 건너뛸 수 없고, 다른 스킬의 승인 절차나 하드 게이트로 대신하지 않는다\./);
+    assert.match(skill, /빌려 쓴 스킬이 다른 스킬로 넘기라고 해도\(예: brainstorming → writing-plans\) 따르지 않고 Gon의 다음 단계로 돌아온다\./);
+    assert.match(skill, /그릴링 한도: `quick` 최대 1라운드, `normal` 최대 2라운드, `deep` 최대 3라운드, 라운드당 질문 5개 이하\./);
+    assert.match(skill, /6단계 전문가는 항상 `gon:gon-expert`로 부르고 `general-purpose`나 다른 에이전트로 대신하지 않는다\./);
+    assert.doesNotMatch(skill, /라운드당 4개/, 'old 4-question cap must be gone');
+
+    const stages = readSkill('stages.md');
+    assert.match(stages, /방법만 빌리/);
+    assert.match(stages, /`gon:gon-expert`/);
+    assert.doesNotMatch(stages, /subagent-driven-development/, 'stage 6 must not hand off to another execution skill');
+
+    const grill = readSkill('cards/grill.md');
+    assert.match(grill, /`deep`이면 최대 3라운드/);
+    assert.match(grill, /라운드당 5개 이하/);
+  });
+
+  test('C1 every dispatch mention of the expert uses the measured agent type gon:gon-expert', () => {
+    for (const rel of ['SKILL.md', 'stages.md', 'tools/claude.md']) {
+      const text = readSkill(rel).replace(/agents\/gon-expert\.md/g, '');
+      const bare = text.match(/(?<!gon:)gon-expert/g) || [];
+      assert.equal(bare.length, 0, `${rel}: use gon:gon-expert, found bare gon-expert`);
+    }
+  });
+});

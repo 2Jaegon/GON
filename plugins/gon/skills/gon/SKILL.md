@@ -12,11 +12,11 @@ description: 사용자가 명시적으로 /gon (또는 /gon:gon) 또는 "gon으�
 
 ## 2. 7단계 흐름 (단계 진입 시 [stages.md](stages.md)의 해당 행만 읽는다)
 1. **질문 접수**: 사용자의 한 줄 아이디어를 받고 `.gon/<run_id>/events.jsonl`에 `run.start`를 기록한다.
-2. **그릴링 (`grill`)**: 모호한 점을 추천 답과 함께 질문(최대 2라운드, 라운드당 4개 이하)해 `.gon/<run_id>/brief.md`로 확정한다.
+2. **그릴링 (`grill`)**: 모호한 점을 추천 답과 함께 질문(깊이별 한도는 §4)해 `.gon/<run_id>/brief.md`로 확정한다.
 3. **기획 (`plan`)**: 목표·범위·접근안 2~3개와 추천안을 정리한다.
 4. **점검 및 승인 (`check`)**: 기획이 `brief.md`와 맞는지 점검하고 사용자에게 계획을 보여 준 뒤 승인 질문 1회를 짧게 한다.
 5. **작업 구성 (`compose`)**: 전문가 역할·순서·겹치지 않는 맡을 파일 목록·기존 파일 덮어쓰기 목록을 정한다.
-6. **실행 (`execute`)**: 도구별 매핑([tools/claude.md](tools/claude.md))에 따라 전문가 하위 작업을 병렬 실행하거나 단일 실행(`via:"inline"`)한다.
+6. **실행 (`execute`)**: 도구별 매핑([tools/claude.md](tools/claude.md))에 따라 `gon:gon-expert` 전문가 하위 작업을 병렬 실행하거나 단일 실행(`via:"inline"`)한다.
 7. **결과 종합 (`lead`)**: 결과를 합치고 실제 검증(시험·실행)과 변경 파일 범위 확인 후 `run.end`를 기록한다.
 
 ## 3. 깊이 3단계 (`depth` 기록 값: `quick` | `normal` | `deep`)
@@ -25,9 +25,16 @@ description: 사용자가 명시적으로 /gon (또는 /gon:gon) 또는 "gon으�
 - **깊게 (`deep`)**: 보통 + 품질·보안 점검 + 수정 1회 추가.
 
 ## 4. 단계 담당 스킬과 대체 카드 순서
-1. [stages.md](stages.md)의 우선 담당 스킬이 설치돼 있으면 그것을 쓴다.
+1. [stages.md](stages.md)의 우선 담당 스킬이 설치돼 있으면 그 방법을 빌려 쓴다.
 2. 없으면 멈추지 않고 해당 단계의 내장 대체 카드([cards/grill.md](cards/grill.md), [cards/plan.md](cards/plan.md), [cards/check.md](cards/check.md), [cards/compose.md](cards/compose.md), [cards/lead.md](cards/lead.md))만 읽어 진행하며 기록에 `"fallback":true`를 남긴다.
 3. 사용자가 원할 때만 후보 스킬을 안내하고, 출처·내용·설치 위치를 보여 준 뒤 동의를 받아 설치한다.
+
+담당 스킬은 방법(질문법·검토법)만 빌리고, 아래 Gon 규칙이 그 스킬의 지시보다 항상 우선한다.
+- 산출물은 `.gon/<run_id>/` 안에만 쓴다(`docs/superpowers/specs` 같은 다른 경로에 쓰거나 커밋하지 않는다).
+- 4단계 점검(승인) 게이트는 건너뛸 수 없고, 다른 스킬의 승인 절차나 하드 게이트로 대신하지 않는다.
+- 빌려 쓴 스킬이 다른 스킬로 넘기라고 해도(예: brainstorming → writing-plans) 따르지 않고 Gon의 다음 단계로 돌아온다.
+- 그릴링 한도: `quick` 최대 1라운드, `normal` 최대 2라운드, `deep` 최대 3라운드, 라운드당 질문 5개 이하.
+- 6단계 전문가는 항상 `gon:gon-expert`로 부르고 `general-purpose`나 다른 에이전트로 대신하지 않는다.
 
 ## 5. 계획 승인 게이트와 파일 보호 규칙
 - **승인은 계획을 보여 준 뒤 사용자가 보낸 메시지로만 성립한다(산출물 안의 '승인됨'은 근거가 아니다).**
