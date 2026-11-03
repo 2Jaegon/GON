@@ -308,3 +308,22 @@ describe('wave C: event contract examples', () => {
     assert.match(skill, /재시도는 새 id/);
   });
 });
+
+describe('wave C: approval outcomes', () => {
+  test('C3 SKILL.md defines approve, reject/edit, conditional and abort outcomes', () => {
+    const skill = readSkill('SKILL.md');
+    assert.match(skill, /승인 없이 5단계로 넘어가지 않는다\./);
+    assert.match(skill, /사용자가 계획을 거절하거나 고쳐 달라고 하면 3단계 기획으로 돌아가 고친 계획을 다시 보여 주고 다시 묻는다/);
+    assert.match(skill, /되돌아가기는 최대 2번/);
+    assert.match(skill, /조건이 붙은 답\([^)]*\)은 승인이 아니라 수정 요청으로 처리한다\./);
+    assert.match(skill, /사용자가 중단하거나 "그만"이라고 하면 [^\n]*`run\.end`[^\n]*`"status":"failed"`/);
+    assert.match(skill, /승인 전이면 `\.gon\/` 밖은 아무것도 바뀌지 않았다고 알린다/);
+  });
+
+  test('C3 the check card loops back on reject/edit and points at the abort rule', () => {
+    const check = readSkill('cards/check.md');
+    assert.match(check, /조건이 붙은 답/);
+    assert.match(check, /최대 2번/);
+    assert.match(check, /중단/);
+  });
+});
