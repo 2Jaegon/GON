@@ -95,3 +95,13 @@ test('onboarding.md covers all required onboarding topics and never mentions byp
   assert.doesNotMatch(text, /우회/);
   assert.doesNotMatch(text, /--dangerously/i);
 });
+
+test('C4 onboarding never invents install commands for third-party skills and asks for the official link', () => {
+  const text = fs.readFileSync(path.resolve('plugins/gon/skills/gon/onboarding.md'), 'utf8');
+  assert.doesNotMatch(text, /\bnpx\b/);
+  assert.doesNotMatch(text, /claude\s+plugin\s+(install|marketplace\s+add)/);
+  assert.doesNotMatch(text, /\/plugin\s+(install|marketplace)/);
+  assert.doesNotMatch(text, /공식 설치 명령만 안내/);
+  assert.match(text, /설치 명령을 지어내지 않는다/);
+  assert.match(text, /공식 링크를 사용자에게 받/);
+});
