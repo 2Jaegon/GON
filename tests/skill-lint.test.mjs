@@ -2,6 +2,7 @@ import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { validateRun } from '../plugins/gon/viewer/events.mjs';
 
 const PLUGIN_ROOT = path.resolve('plugins/gon');
 const SKILL_DIR = path.join(PLUGIN_ROOT, 'skills/gon');
@@ -233,5 +234,77 @@ describe('wave C: skill content rules', () => {
       const bare = text.match(/(?<!gon:)gon-expert/g) || [];
       assert.equal(bare.length, 0, `${rel}: use gon:gon-expert, found bare gon-expert`);
     }
+  });
+});
+
+const EXAMPLE_RUN_ID = '20261102-1430-a1b2';
+const PLACEHOLDERS = {
+  '<ISO8601>': '2026-11-02T14:30:05+09:00',
+  '<run_id>': EXAMPLE_RUN_ID,
+  '<요청>': '할 일 목록 CLI',
+  '<요약>': '한 줄 요약',
+  '<바꾼 파일>': 'src/app.js',
+};
+
+function fillExample(line, where) {
+  let out = line;
+  for (const [k, v] of Object.entries(PLACEHOLDERS)) out = out.split(k).join(v);
+  assert.doesNotMatch(out, /<[^>]*>/, `${where}: unknown placeholder in ${line}`);
+  return JSON.parse(out);
+}
+
+const EXAMPLE_START = { v: 1, t: PLACEHOLDERS['<ISO8601>'], ev: 'run.start', run: EXAMPLE_RUN_ID, req: 'x', tool: 'claude-code', depth: 'normal' };
+
+describe('wave C: event contract examples', () => {
+  test('C2 the SKILL.md jsonl example is a full run that passes validateRun', () => {
+    const skill = readSkill('SKILL.md');
+    const block = /^```jsonl\r?\n([\s\S]*?)^```/m.exec(skill);
+    assert.ok(block, 'SKILL.md must contain a ```jsonl example run');
+    const events = block[1].split(/\r?\n/).filter((l) => l.trim()).map((l) => fillExample(l, 'SKILL.md'));
+    const res = validateRun(events, { runId: EXAMPLE_RUN_ID });
+    assert.deepEqual(res.errors, []);
+    const stages = new Set(events.filter((e) => e.ev === 'node').map((e) => e.stage).filter(Boolean));
+    for (const st of ['grill', 'plan', 'check', 'compose', 'execute', 'lead']) assert.ok(stages.has(st), `example misses stage ${st}`);
+    const exec = events.filter((e) => e.ev === 'node' && e.status === 'done' && ['fe', 'qa'].includes(e.id));
+    assert.ok(exec.some((e) => Array.isArray(e.files) && e.files.length === 0), 'example shows an empty files array');
+    assert.ok(events.some((e) => e.via === 'subagent' && e.role), 'example shows role and via on execute nodes');
+  });
+
+  test('C2 every inline record example in skills/gon is valid on its own', () => {
+    let count = 0;
+    for (const file of walkFiles(SKILL_DIR)) {
+      const rel = path.relative(SKILL_DIR, file).replace(/\\/g, '/');
+      const text = fs.readFileSync(file, 'utf8');
+      for (const m of text.matchAll(/`(\{"[^`]*"ev":[^`]*\})`/g)) {
+        const rec = fillExample(m[1], rel);
+        let events;
+        if (rec.ev === 'run.start') events = [rec];
+        else if (rec.ev === 'run.end') events = [EXAMPLE_START, rec];
+        else {
+          const stubs = (rec.from || []).filter((p) => p !== 'main').map((p) => ({ t: EXAMPLE_START.t, ev: 'node', id: p, from: ['main'], stage: 'plan', status: 'done' }));
+          events = [EXAMPLE_START, ...stubs, rec];
+        }
+        assert.deepEqual(validateRun(events).errors, [], `${rel}: ${m[1]}`);
+        count += 1;
+      }
+    }
+    assert.ok(count >= 1, 'cards/check.md must show its single-line record');
+    assert.match(readSkill('cards/check.md'), /`\{"t":"<ISO8601>","ev":"node","id":"check","from":\["plan"\],"stage":"check"/);
+  });
+
+  test('C2 SKILL.md states the record contract in words', () => {
+    const skill = readSkill('SKILL.md');
+    assert.ok(skill.includes('`^[a-z0-9][a-z0-9_-]{0,63}$`'), 'node id regex');
+    assert.match(skill, /노드 줄에는 `id`·`status`를 항상 넣고, 그 노드의 첫 줄에는 `from`·`stage`도 넣는다/);
+    assert.match(skill, /`from`: 부모 노드 id 배열 또는 `\["main"\]`/);
+    assert.match(skill, /`files`: [^\n]*배열[^\n]*`\[\]`/);
+    assert.match(skill, /`via`: `subagent` \| `inline`/);
+    assert.match(skill, /`fallback`/);
+    assert.match(skill, /`sum`/);
+    assert.match(skill, /`v:1`은 `run\.start`에만/);
+    assert.match(skill, /`run\.end`의 `status`는 [^\n]*`done`[^\n]*`failed`/);
+    assert.match(skill, /소문자 16진수/);
+    assert.match(skill, /date -u \+%Y-%m-%dT%H:%M:%SZ/);
+    assert.match(skill, /재시도는 새 id/);
   });
 });
