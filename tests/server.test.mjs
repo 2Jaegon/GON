@@ -912,3 +912,66 @@ test('isLinkOrJunction unit: junction true, regular file false, directory false,
     ws.cleanup();
   }
 });
+
+// Creates a real file even for Windows reserved names (CON.md, NUL.md): the namespaced
+// \\?\ form bypasses device-name mapping, and Node opens it later by its plain path.
+// So if a name guard is removed, the request reaches the file and answers 200 instead of 400.
+function writeRealFile(dir, name) {
+  fs.writeFileSync(path.toNamespacedPath(path.join(dir, name)), `SERVED:${name}`, 'utf8');
+}
+
+async function assertRejectedWithoutLeak(srv, name) {
+  const res = await getFile(srv, name);
+  assert.equal(res.status, 400, `${name}: expected 400, got ${res.status} ${res.body}`);
+  assert.equal(res.body, 'Bad Request', `${name}: unexpected body`);
+}
+
+test('name guard "..": a real a..md / ..md in the run folder is rejected with 400, not served', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    for (const name of ['a..md', '..md']) writeRealFile(runDir, name);
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      for (const name of ['a..md', '..md']) await assertRejectedWithoutLeak(srv, name);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('name guard reserved: real CON.md, NUL.md, COM1.md, aux.md, CON.notes.md, COM1.x.md and bare CON/COM1 are rejected with 400', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    const withExt = ['CON.md', 'NUL.md', 'COM1.md', 'aux.md', 'CON.notes.md', 'COM1.x.md'];
+    for (const name of withExt) writeRealFile(runDir, name);
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      for (const name of [...withExt, 'CON', 'COM1']) await assertRejectedWithoutLeak(srv, name);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('name guard 8.3: a real PROGRA~1.md and a short-name style LONGFI~1.md are rejected with 400', async () => {
+  const ws = makeTempWorkspace();
+  try {
+    const runDir = copyGoodRun(ws.gonDir, '20261102-1430-a1b2');
+    writeRealFile(runDir, 'PROGRA~1.md');
+    writeRealFile(runDir, 'long file name for short alias.md');
+    const srv = await startServer({ gonDir: ws.gonDir });
+    try {
+      for (const name of ['PROGRA~1.md', 'LONGFI~1.md', 'BRIEF~1.MD']) await assertRejectedWithoutLeak(srv, name);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
