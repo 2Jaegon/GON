@@ -7,6 +7,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { startServer } from '../plugins/gon/viewer/server.mjs';
+import * as serverModule from '../plugins/gon/viewer/server.mjs';
 
 const FIXTURES = path.resolve('tests/fixtures');
 
@@ -873,6 +874,39 @@ test('/api/runs does not hide a run when building its summary throws: the error 
     } finally {
       Date.parse = originalParse;
       await srv.close();
+    }
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('isLinkOrJunction unit: junction true, regular file false, directory false, stubbed symlink true, realpath mismatch true', () => {
+  const { isLinkOrJunction } = serverModule;
+  assert.equal(typeof isLinkOrJunction, 'function', 'server.mjs must export isLinkOrJunction for tests');
+  const ws = makeTempWorkspace();
+  try {
+    const target = path.join(ws.root, 'target-dir');
+    fs.mkdirSync(target);
+    const junction = path.join(ws.root, 'j.md');
+    fs.symlinkSync(target, junction, 'junction'); // no privilege needed; failure fails the test
+    const file = path.join(ws.root, 'plain.md');
+    fs.writeFileSync(file, 'x', 'utf8');
+
+    assert.equal(isLinkOrJunction(junction), true, 'real junction');
+    assert.equal(isLinkOrJunction(file), false, 'regular file');
+    assert.equal(isLinkOrJunction(target), false, 'regular directory');
+
+    // Symlink branch without needing symlink privilege: stub lstat to report a symbolic link.
+    const originalLstat = fs.lstatSync;
+    try {
+      fs.lstatSync = () => ({ isSymbolicLink: () => true });
+      assert.equal(isLinkOrJunction(file), true, 'lstat says symbolic link');
+      // Realpath branch: lstat claims "not a link", but the junction resolves elsewhere.
+      fs.lstatSync = () => ({ isSymbolicLink: () => false });
+      assert.equal(isLinkOrJunction(junction), true, 'realpath differs from parent + name');
+      assert.equal(isLinkOrJunction(file), false, 'realpath matches for a plain file');
+    } finally {
+      fs.lstatSync = originalLstat;
     }
   } finally {
     ws.cleanup();

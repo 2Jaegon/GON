@@ -97,7 +97,8 @@ function sendStatus(res, status) {
   sendResponse(res, status, 'text/plain; charset=utf-8', STATUS_TEXT[status] || 'Error');
 }
 
-function isLinkOrJunction(targetPath) {
+// Exported for unit tests only; not part of the server's interface.
+export function isLinkOrJunction(targetPath) {
   const st = fs.lstatSync(targetPath);
   if (st.isSymbolicLink()) return true;
   const parentReal = fs.realpathSync(path.dirname(targetPath));
