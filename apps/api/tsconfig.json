@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aso/contracts": ["../../packages/contracts/dist/index.d.ts"],
+      "@aso/database": ["../../packages/database/dist/index.d.ts"],
+      "@aso/core": ["../../packages/aso-core/dist/index.d.ts"],
+      "@aso/security": ["../../packages/security/dist/index.d.ts"],
+      "@aso/execution-protocol": ["../../packages/execution-protocol/dist/index.d.ts"],
+      "@aso/provider-adapters": ["../../packages/provider-adapters/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}
+

@@ -1,0 +1,30 @@
+{
+  "name": "@aso/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aso/contracts": "*",
+    "@aso/database": "*",
+    "@aso/core": "*",
+    "@aso/security": "*",
+    "@aso/execution-protocol": "*",
+    "@aso/provider-adapters": "*",
+    "fastify": "^5.2.1",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.9",
+    "@types/ws": "^8.5.14"
+  }
+}
+

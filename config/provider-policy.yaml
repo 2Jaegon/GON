@@ -1,0 +1,22 @@
+version: "1.0.0"
+policies:
+  openai:
+    allowed_modes:
+      - "USER_API_KEY"
+      - "LOCAL_NATIVE_CLI"
+    partner_oauth:
+      enabled: false
+      reason: "Requires OpenAI approved partnership agreement."
+  anthropic:
+    allowed_modes:
+      - "USER_API_KEY"
+    partner_oauth:
+      enabled: false
+      reason: "Third-party subscription relay strictly forbidden by Anthropic terms."
+  google:
+    allowed_modes:
+      - "USER_API_KEY"
+    partner_oauth:
+      enabled: false
+      reason: "Gemini CLI OAuth tokens cannot be harvested for external multi-user inference."
+

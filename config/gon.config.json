@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "defaultHost": "claude",
+  "defaultMode": "auto",
+  "execution": {
+    "maxConcurrency": 3,
+    "defaultTimeoutMs": 600000,
+    "enableParallel": true,
+    "useWorktreesOnWriteConflict": true,
+    "requireApprovalForExternalInstall": true,
+    "requireApprovalForDestructiveAction": true,
+    "retryLimitPerTask": 2
+  },
+  "routing": {
+    "localFirst": true,
+    "allowExternalDiscovery": true,
+    "autoInstallSkills": false,
+    "eccMode": "specialist-only",
+    "allowMultiplePlanners": false,
+    "memoryProvider": "claude-mem",
+    "graphify": "conditional"
+  },
+  "context": {
+    "progressiveDisclosure": true,
+    "maxSkillBodiesPerTask": 3,
+    "maxMemoryResults": 5,
+    "alwaysLoadedPolicyTargetTokens": 700,
+    "redactSecrets": true
+  },
+  "budget": {
+    "maxEstimatedUsdPerRun": null,
+    "maxObservedTokensPerRun": null,
+    "warnAtFraction": 0.8,
+    "reserveVerificationFraction": 0.2,
+    "onUnknownUsage": "track-as-unknown"
+  },
+  "telemetry": {
+    "enabled": true,
+    "logPrompts": false,
+    "logCommandOutput": false,
+    "storeUsageWhenReported": true
+  }
+}
+

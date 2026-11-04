@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "ecc:security-review",
+      "repository": "https://github.com/affaan-m/ECC",
+      "commit": "FILL_AFTER_APPROVAL",
+      "sourcePath": "skills/security-review/SKILL.md",
+      "sha256": "FILL_AFTER_APPROVAL",
+      "installationMode": "selected-manual-or-native-plugin",
+      "approvedByUser": false
+    }
+  ]
+}
+

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "skills": {
+    "gon:gon": {
+      "phases": ["refine", "plan", "route", "approve", "execute", "verify"],
+      "capabilities": ["orchestration", "adaptive-planning", "coordination"],
+      "permissionRisk": "low",
+      "role": "topLevelPlanner",
+      "approved": true
+    },
+    "karpathy-guidelines": {
+      "phases": ["plan", "execute", "verify"],
+      "capabilities": ["minimalism", "simplicity", "policy"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "ponytail": {
+      "phases": ["plan", "execute", "verify"],
+      "capabilities": ["minimalism", "yagni", "code-compression"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "find-skills": {
+      "phases": ["route"],
+      "capabilities": ["discovery"],
+      "permissionRisk": "medium",
+      "approved": true
+    },
+    "graphify": {
+      "phases": ["plan"],
+      "capabilities": ["structure", "dependency-graph"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "claude-mem": {
+      "phases": ["refine", "plan"],
+      "capabilities": ["history", "memory"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "mattpocock-skills:grilling": {
+      "phases": ["refine"],
+      "capabilities": ["clarify", "interview"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "superpowers:brainstorming": {
+      "phases": ["plan"],
+      "capabilities": ["brainstorming", "options"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "superpowers:verification-before-completion": {
+      "phases": ["verify"],
+      "capabilities": ["verification", "testing"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "ecc:security-review": {
+      "phases": ["verify"],
+      "capabilities": ["security", "audit"],
+      "permissionRisk": "medium",
+      "approved": true
+    },
+    "ecc:api-design": {
+      "phases": ["plan", "execute"],
+      "capabilities": ["api-design", "rest", "contracts"],
+      "permissionRisk": "low",
+      "approved": true
+    },
+    "stageshow": {
+      "phases": ["plan", "execute"],
+      "capabilities": ["ui-design", "faux-product-ui", "interactive-demo", "motion", "bento-grid", "frontend"],
+      "permissionRisk": "low",
+      "approved": true
+    }
+  }
+}
+

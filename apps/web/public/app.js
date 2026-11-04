@@ -1,0 +1,2605 @@
+// ==========================================================================
+// Gon ASO Web — claude.ai & side_pj Direct Chat Interface Architecture
+// Pure clean typography. No icons or emojis outside the sidebar navigation.
+// ==========================================================================
+
+const API_URL = "http://127.0.0.1:4000/api/v1";
+
+let currentWorkspaceId = "";
+let currentProjectId = "";
+let activeSessionId = null;
+let activeRunId = null;
+let activeEventSource = null;
+let cachedSessions = [];
+
+// ==========================================================================
+// Sidebar Collapse / Expand State
+// ==========================================================================
+
+function initSidebarState() {
+  const saved = localStorage.getItem("gon.sidebar_collapsed");
+  const isCollapsed = saved === "true";
+  applySidebarState(isCollapsed);
+}
+
+function toggleSidebarCollapse() {
+  const layout = document.getElementById("app-layout");
+  const isCurrentlyCollapsed = layout ? layout.classList.contains("sidebar-collapsed") : false;
+  applySidebarState(!isCurrentlyCollapsed);
+}
+
+function applySidebarState(collapsed) {
+  const layout = document.getElementById("app-layout");
+  const floatingBtn = document.getElementById("floating-sidebar-toggle");
+  if (layout) {
+    layout.classList.toggle("sidebar-collapsed", collapsed);
+  }
+  if (floatingBtn) {
+    floatingBtn.classList.toggle("visible", collapsed);
+  }
+  try {
+    localStorage.setItem("gon.sidebar_collapsed", String(collapsed));
+  } catch (e) {
+    // fallback
+  }
+
+  // Smoothly sync canvas resolution across the entire CSS transition
+  resizeCobwebCanvas();
+  let frames = 0;
+  const syncStep = () => {
+    resizeCobwebCanvas();
+    frames++;
+    if (frames < 20) {
+      requestAnimationFrame(syncStep);
+    }
+  };
+  requestAnimationFrame(syncStep);
+}
+
+// ==========================================================================
+// Theme Management (Light / Dark / System Mode)
+// ==========================================================================
+
+let currentThemePref = "light";
+
+function initTheme() {
+  currentThemePref = localStorage.getItem("gon.theme_preference") || "light";
+  applyThemePreference(currentThemePref);
+
+  if (window.matchMedia) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => {
+      if (currentThemePref === "system") {
+        applyThemePreference("system");
+      }
+    };
+    if (media.addEventListener) {
+      media.addEventListener("change", handler);
+    } else if (media.addListener) {
+      media.addListener(handler);
+    }
+  }
+}
+
+function getEffectiveTheme(pref) {
+  if (pref === "light") return "light";
+  if (pref === "dark") return "dark";
+  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+
+function applyThemePreference(pref) {
+  currentThemePref = pref;
+  try {
+    localStorage.setItem("gon.theme_preference", pref);
+  } catch (e) {
+    // fallback
+  }
+
+  const effective = getEffectiveTheme(pref);
+  document.documentElement.dataset.theme = effective;
+  updateThemeModalUI(pref);
+}
+
+function updateThemeModalUI(pref) {
+  ["light", "dark", "system"].forEach((p) => {
+    const card = document.getElementById(`theme-opt-${p}`);
+    if (card) {
+      card.classList.toggle("active", p === pref);
+    }
+  });
+}
+
+function selectThemeOption(pref) {
+  applyThemePreference(pref);
+}
+
+// ==========================================================================
+// Settings Modal & Profile Dropdown Menu
+// ==========================================================================
+
+function toggleProfileDropdown(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById("profile-dropdown-menu");
+  const chevron = document.getElementById("user-chip-chevron");
+  const btn = document.getElementById("btn-user-profile");
+  if (!menu) return;
+  const isClosed = menu.classList.contains("hidden");
+  if (isClosed) {
+    menu.classList.remove("hidden");
+    if (chevron) chevron.classList.add("open");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+  } else {
+    menu.classList.add("hidden");
+    if (chevron) chevron.classList.remove("open");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function closeProfileDropdown() {
+  const menu = document.getElementById("profile-dropdown-menu");
+  const chevron = document.getElementById("user-chip-chevron");
+  const btn = document.getElementById("btn-user-profile");
+  if (menu) menu.classList.add("hidden");
+  if (chevron) chevron.classList.remove("open");
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+function openSettingsFromProfile() {
+  closeProfileDropdown();
+  openSettingsModal();
+}
+
+function openUsageFromProfile() {
+  closeProfileDropdown();
+  switchTab("usage");
+}
+
+function openConnectionsFromProfile() {
+  closeProfileDropdown();
+  switchTab("connections");
+}
+
+function openRunnerFromProfile() {
+  closeProfileDropdown();
+  switchTab("runner");
+}
+
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("profile-dropdown-menu");
+  const container = document.getElementById("user-profile-menu-container");
+  if (menu && !menu.classList.contains("hidden")) {
+    if (!container || !container.contains(e.target)) {
+      closeProfileDropdown();
+    }
+  }
+});
+
+function openSettingsModal() {
+  const modal = document.getElementById("settings-modal-backdrop");
+  if (modal) {
+    updateThemeModalUI(currentThemePref);
+    modal.classList.remove("hidden");
+  }
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById("settings-modal-backdrop");
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+}
+
+function closeSettingsModalOnBackdrop(e) {
+  if (e.target && e.target.id === "settings-modal-backdrop") {
+    closeSettingsModal();
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeSettingsModal();
+    closeProfileDropdown();
+  }
+});
+
+// ==========================================================================
+// Sidebar Recent Runs / History (Collapsible Toggle)
+// ==========================================================================
+
+let isSidebarRunsOpen = true;
+
+function toggleSidebarRuns() {
+  isSidebarRunsOpen = !isSidebarRunsOpen;
+  const container = document.getElementById("sidebar-runs-container");
+  const chevron = document.getElementById("sidebar-runs-chevron");
+  if (container) {
+    container.classList.toggle("collapsed", !isSidebarRunsOpen);
+  }
+  if (chevron) {
+    chevron.classList.toggle("open", isSidebarRunsOpen);
+  }
+}
+
+function formatRunTitle(rawRequest) {
+  if (!rawRequest || typeof rawRequest !== "string") return "새 작업";
+  let line = rawRequest.trim().split("\n")[0].trim();
+  line = line.replace(/^[#*\-•\d.]+\s*/, "").trim();
+  if (line.length > 28) {
+    line = line.slice(0, 28) + "...";
+  }
+  return line || "새 작업";
+}
+
+function groupRunsIntoSessions(runs) {
+  const sessionsMap = new Map();
+  for (const r of runs) {
+    const sessId = (r.runContext && r.runContext.sessionId) ? r.runContext.sessionId : r.id;
+    if (!sessionsMap.has(sessId)) {
+      sessionsMap.set(sessId, {
+        id: sessId,
+        title: formatRunTitle(r.rawRequest),
+        createdAt: r.createdAt || new Date().toISOString(),
+        updatedAt: r.createdAt || new Date().toISOString(),
+        runs: [r]
+      });
+    } else {
+      const sess = sessionsMap.get(sessId);
+      sess.runs.push(r);
+      const t = new Date(r.createdAt || 0).getTime();
+      if (t > new Date(sess.updatedAt).getTime()) {
+        sess.updatedAt = r.createdAt;
+      }
+    }
+  }
+
+  for (const sess of sessionsMap.values()) {
+    sess.runs.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    if (sess.runs.length > 0 && sess.runs[0].rawRequest) {
+      sess.title = formatRunTitle(sess.runs[0].rawRequest);
+    }
+  }
+
+  return Array.from(sessionsMap.values()).sort((a, b) => {
+    return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+  });
+}
+
+function renderSidebarSessions(sessions) {
+  cachedSessions = sessions || [];
+  const list = document.getElementById("sidebar-runs-list");
+  const countEl = document.getElementById("sidebar-runs-count");
+  if (countEl) countEl.textContent = sessions ? sessions.length : 0;
+
+  if (!list) return;
+  if (!sessions || sessions.length === 0) {
+    list.innerHTML = `<div class="sidebar-runs-empty">최근 항목이 없습니다</div>`;
+    return;
+  }
+
+  list.innerHTML = sessions.map((s) => {
+    const isActive = activeSessionId === s.id;
+    return `
+      <div class="sidebar-run-item-wrap ${isActive ? "active" : ""}">
+        <button type="button" class="sidebar-run-item" onclick="viewSession('${s.id}')" title="${escapeHtml(s.title || '')}">
+          <span class="sidebar-run-title">${escapeHtml(s.title || '새 대화')}</span>
+        </button>
+        <button type="button" class="sidebar-run-delete-btn" onclick="deleteSession('${s.id}', event)" title="대화 세션 삭제" aria-label="대화 세션 삭제">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderSidebarRuns(items) {
+  const sessions = groupRunsIntoSessions(items || []);
+  renderSidebarSessions(sessions);
+}
+
+async function loadSidebarRuns() {
+  if (!currentWorkspaceId || !currentProjectId) return;
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
+    if (res.ok) {
+      const data = await res.json();
+      const items = data.items || [];
+      const sessions = groupRunsIntoSessions(items);
+      try {
+        localStorage.setItem("gon.sessions_cache", JSON.stringify(sessions));
+      } catch (e) {}
+      renderSidebarSessions(sessions);
+    }
+  } catch (err) {
+    console.warn("Load sidebar runs error:", err);
+  }
+}
+
+// ==========================================================================
+// Custom Confirmation Dialog & Toast Notifications
+// ==========================================================================
+
+function showConfirmDialog({ title = "확인", message = "", confirmText = "삭제", cancelText = "취소", danger = true } = {}) {
+  return new Promise((resolve) => {
+    const backdrop = document.getElementById("confirm-dialog-backdrop");
+    const titleEl = document.getElementById("confirm-modal-title");
+    const descEl = document.getElementById("confirm-modal-desc");
+    const confirmBtn = document.getElementById("confirm-modal-confirm-btn");
+    const cancelBtn = document.getElementById("confirm-modal-cancel-btn");
+
+    if (!backdrop || !confirmBtn || !cancelBtn) {
+      resolve(confirm(message || title));
+      return;
+    }
+
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = message;
+    if (confirmText) confirmBtn.textContent = confirmText;
+    if (cancelText) cancelBtn.textContent = cancelText;
+
+    confirmBtn.className = danger ? "btn btn-danger" : "btn btn-primary";
+
+    const cleanup = () => {
+      backdrop.classList.add("hidden");
+      confirmBtn.removeEventListener("click", onConfirm);
+      cancelBtn.removeEventListener("click", onCancel);
+      backdrop.removeEventListener("click", onBackdrop);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+
+    const onConfirm = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    const onBackdrop = (e) => {
+      if (e.target === backdrop) {
+        cleanup();
+        resolve(false);
+      }
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        cleanup();
+        resolve(false);
+      } else if (e.key === "Enter") {
+        cleanup();
+        resolve(true);
+      }
+    };
+
+    confirmBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", onCancel);
+    backdrop.addEventListener("click", onBackdrop);
+    window.addEventListener("keydown", onKeyDown);
+
+    backdrop.classList.remove("hidden");
+    confirmBtn.focus();
+  });
+}
+
+function showToast(message, type = "info") {
+  let toastContainer = document.getElementById("toast-container");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.id = "toast-container";
+    toastContainer.className = "toast-container";
+    document.body.appendChild(toastContainer);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `gon-toast toast-${type}`;
+  toast.innerHTML = `<span class="toast-message">${escapeHtml(message)}</span>`;
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("show");
+  }, 10);
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => {
+      toast.remove();
+    }, 250);
+  }, 2600);
+}
+
+async function deleteSession(sessionId, e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  const confirmed = await showConfirmDialog({
+    title: "대화 기록 삭제",
+    message: "이 대화 기록을 삭제하시겠습니까? 삭제된 대화는 복구할 수 없습니다.",
+    confirmText: "삭제",
+    cancelText: "취소",
+    danger: true
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/sessions/${sessionId}`, {
+      method: "DELETE"
+    });
+    if (res.ok) {
+      cachedSessions = cachedSessions.filter((s) => s.id !== sessionId);
+      try {
+        localStorage.setItem("gon.sessions_cache", JSON.stringify(cachedSessions));
+      } catch {}
+      if (activeSessionId === sessionId) {
+        startNewConversation();
+      } else {
+        renderSidebarSessions(cachedSessions);
+      }
+      showToast("대화 기록이 삭제되었습니다.", "success");
+    } else {
+      showToast("대화 삭제에 실패했습니다.", "error");
+    }
+  } catch (err) {
+    console.error("Delete session error:", err);
+    showToast("서버 연결 실패로 대화를 삭제하지 못했습니다.", "error");
+  }
+}
+
+async function deleteRun(runId, e) {
+  return deleteSession(runId, e);
+}
+
+// ==========================================================================
+// Chat Expand / Collapse Toggle (side_pj isChatExpanded exact behavior)
+// ==========================================================================
+
+let isChatExpanded = false;
+
+function toggleChatExpand() {
+  isChatExpanded = !isChatExpanded;
+  const panel = document.getElementById("chat-panel-container");
+  const btn = document.getElementById("btn-chat-expand");
+  if (panel) {
+    panel.classList.toggle("chat-expanded", isChatExpanded);
+  }
+  if (btn) {
+    const maxIcon = btn.querySelector(".icon-maximize");
+    const minIcon = btn.querySelector(".icon-minimize");
+    if (maxIcon && minIcon) {
+      maxIcon.classList.toggle("hidden", isChatExpanded);
+      minIcon.classList.toggle("hidden", !isChatExpanded);
+    }
+    btn.setAttribute("title", isChatExpanded ? "사무실/거미줄 그래프 보기 (접기) [Esc]" : "채팅창 화면 전체 펼치기 [Esc]");
+  }
+  resizeCobwebCanvas();
+  let frames = 0;
+  const syncStep = () => {
+    resizeCobwebCanvas();
+    frames++;
+    if (frames < 20) requestAnimationFrame(syncStep);
+  };
+  requestAnimationFrame(syncStep);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && isChatExpanded) {
+    toggleChatExpand();
+  }
+});
+
+// ==========================================================================
+// Model Picker & Reasoning Effort (side_pj & Claude exact behavior)
+// ==========================================================================
+
+let currentSelectedModel = "claude-3-7-sonnet";
+let currentSelectedModelName = "Opus 3.5";
+let currentSelectedEffort = "medium"; // 'low' | 'medium' | 'high'
+
+const EFFORT_LABELS = {
+  low: "Low",
+  medium: "중간",
+  high: "High",
+};
+
+function initModelPicker() {
+  const savedModel = localStorage.getItem("gon.selected_model");
+  const savedEffort = localStorage.getItem("gon.selected_effort");
+  const savedName = localStorage.getItem("gon.selected_model_name");
+  if (savedModel) currentSelectedModel = savedModel;
+  if (savedEffort) currentSelectedEffort = savedEffort;
+  if (savedName) currentSelectedModelName = savedName;
+  updateModelPickerButtonUI();
+}
+
+function updateModelPickerButtonUI() {
+  const labelEl = document.getElementById("model-picker-display-label");
+  if (labelEl) {
+    const effortText = EFFORT_LABELS[currentSelectedEffort] || "중간";
+    labelEl.textContent = `${currentSelectedModelName} ${effortText}`;
+  }
+  document.querySelectorAll(".effort-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.effort === currentSelectedEffort);
+  });
+  document.querySelectorAll(".popover-model-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.modelId === currentSelectedModel);
+  });
+}
+
+function toggleModelPickerPopover(e) {
+  if (e) e.stopPropagation();
+  const popover = document.getElementById("model-picker-popover");
+  const btn = document.getElementById("composer-model-picker-btn");
+  if (!popover) return;
+  const isClosed = popover.classList.contains("hidden");
+  if (isClosed) {
+    popover.classList.remove("hidden");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+  } else {
+    popover.classList.add("hidden");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function selectModelEffort(effort) {
+  currentSelectedEffort = effort;
+  try {
+    localStorage.setItem("gon.selected_effort", effort);
+  } catch (e) {}
+  updateModelPickerButtonUI();
+}
+
+function selectModelItem(modelId, modelName) {
+  currentSelectedModel = modelId;
+  currentSelectedModelName = modelName;
+  try {
+    localStorage.setItem("gon.selected_model", modelId);
+    localStorage.setItem("gon.selected_model_name", modelName);
+  } catch (e) {}
+  updateModelPickerButtonUI();
+  const popover = document.getElementById("model-picker-popover");
+  if (popover) popover.classList.add("hidden");
+  const btn = document.getElementById("composer-model-picker-btn");
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+document.addEventListener("click", (e) => {
+  const popover = document.getElementById("model-picker-popover");
+  const container = document.getElementById("model-picker-container");
+  if (popover && !popover.classList.contains("hidden")) {
+    if (!container || !container.contains(e.target)) {
+      popover.classList.add("hidden");
+      const btn = document.getElementById("composer-model-picker-btn");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+  }
+});
+
+// ==========================================================================
+// Live Real-Time Dot Cobweb Nexus Visualizer Engine (Canvas 2D, 60fps)
+// Visualizes parallel task breakdown as dots and cobweb lines
+// ==========================================================================
+
+let cobwebCanvas = null;
+let cobwebCtx = null;
+let cobwebAnimFrame = null;
+let cobwebPan = { x: 0, y: 0 };
+let cobwebIsDragging = false;
+let cobwebDragStart = { x: 0, y: 0 };
+
+// Center ASO Orchestrator Node
+const cobwebCoreNode = {
+  radius: 13,
+  pulse: 0,
+  label: "ASO Core",
+};
+
+// Parallel Task Nodes list
+let cobwebTaskNodes = [];
+// Moving data/signal particles across cobweb lines
+let cobwebParticles = [];
+// Ambient floating ether dust points
+let cobwebAmbientDots = [];
+
+function initCobwebCanvas() {
+  cobwebCanvas = document.getElementById("dot-cobweb-canvas");
+  if (!cobwebCanvas) return;
+  cobwebCtx = cobwebCanvas.getContext("2d");
+
+  // Create ambient dots for living intelligence feel
+  cobwebAmbientDots = [];
+  for (let i = 0; i < 36; i++) {
+    cobwebAmbientDots.push({
+      x: (Math.random() - 0.5) * 600,
+      y: (Math.random() - 0.5) * 350,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      radius: Math.random() * 1.5 + 1.2,
+      alpha: Math.random() * 0.25 + 0.15,
+    });
+  }
+
+  // Setup interactions: drag to pan
+  cobwebCanvas.addEventListener("mousedown", (e) => {
+    cobwebIsDragging = true;
+    cobwebDragStart = { x: e.clientX - cobwebPan.x, y: e.clientY - cobwebPan.y };
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (cobwebIsDragging) {
+      cobwebPan.x = e.clientX - cobwebDragStart.x;
+      cobwebPan.y = e.clientY - cobwebDragStart.y;
+    }
+    handleCobwebHover(e);
+  });
+
+  window.addEventListener("mouseup", () => {
+    cobwebIsDragging = false;
+  });
+
+  window.addEventListener("resize", () => {
+    resizeCobwebCanvas();
+  });
+
+  if (window.ResizeObserver && cobwebCanvas) {
+    const ro = new ResizeObserver(() => {
+      resizeCobwebCanvas();
+    });
+    ro.observe(cobwebCanvas);
+  }
+
+  resizeCobwebCanvas();
+
+  // Start rendering loop
+  if (cobwebAnimFrame) cancelAnimationFrame(cobwebAnimFrame);
+  renderCobwebFrame();
+}
+
+function resizeCobwebCanvas() {
+  if (!cobwebCanvas) return;
+  const rect = cobwebCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(rect.width, 200);
+  const h = Math.max(rect.height, 150);
+  const targetBufferW = Math.round(w * dpr);
+  const targetBufferH = Math.round(h * dpr);
+
+  if (cobwebCanvas.width !== targetBufferW || cobwebCanvas.height !== targetBufferH) {
+    cobwebCanvas.width = targetBufferW;
+    cobwebCanvas.height = targetBufferH;
+  }
+}
+
+function resetCobwebCamera() {
+  cobwebPan = { x: 0, y: 0 };
+}
+
+function setCobwebTasks(tasks) {
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    cobwebTaskNodes = [];
+    updateCobwebBadge("대기 중");
+    return;
+  }
+
+  const count = tasks.length;
+  updateCobwebBadge(`${count}개 병렬 태스크`);
+
+  const rect = cobwebCanvas ? cobwebCanvas.getBoundingClientRect() : { width: 800, height: 400 };
+  const baseW = rect.width || 800;
+  const baseH = rect.height || 400;
+  const radius = Math.max(95, Math.min(210, Math.min(baseW * 0.22, baseH * 0.36) + count * 6));
+
+  cobwebTaskNodes = tasks.map((t, idx) => {
+    const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
+    return {
+      key: t.key || `task-${idx + 1}`,
+      name: t.title || t.key,
+      skill: t.skill || "Standard",
+      status: "pending", // 'pending' | 'running' | 'completed' | 'failed'
+      targetAngle: angle,
+      currentAngle: angle,
+      dist: radius,
+      pulse: 0,
+      glow: 0,
+      floatOffset: Math.random() * 10,
+    };
+  });
+
+  // Burst signal particles from core to all task dots
+  cobwebTaskNodes.forEach((node) => {
+    emitCobwebParticle(0, 0, node, "dispatch");
+  });
+}
+
+function setCobwebTaskStatus(taskKey, status) {
+  const node = cobwebTaskNodes.find((n) => n.key === taskKey);
+  if (!node) return;
+  node.status = status;
+
+  if (status === "running") {
+    node.pulse = 1.0;
+    node.glow = 1.0;
+    updateCobwebBadge(`실행 중: ${node.name.slice(0, 14)}`);
+    // Continuously emit signal particles to running node
+    emitCobwebParticle(0, 0, node, "pulse");
+  } else if (status === "completed") {
+    node.glow = 0.8;
+    updateCobwebBadge(`완료됨: ${node.name.slice(0, 14)}`);
+    emitCobwebParticle(node, 0, 0, "diff");
+  }
+}
+
+function setCobwebAllDone() {
+  cobwebTaskNodes.forEach((n) => {
+    n.status = "completed";
+    n.glow = 0.6;
+  });
+  cobwebCoreNode.pulse = 1.5;
+  updateCobwebBadge("모든 태스크 완료");
+}
+
+function resetCobweb() {
+  cobwebTaskNodes = [];
+  cobwebParticles = [];
+  cobwebPan = { x: 0, y: 0 };
+  updateCobwebBadge("대기 중");
+}
+
+function updateCobwebBadge(text) {
+  const badge = document.getElementById("cobweb-task-count-badge");
+  if (badge) badge.textContent = text;
+}
+
+function emitCobwebParticle(from, to, targetNode, type) {
+  for (let i = 0; i < 3; i++) {
+    cobwebParticles.push({
+      progress: Math.random() * 0.2,
+      speed: 0.018 + Math.random() * 0.012,
+      targetNode: targetNode,
+      type: type,
+    });
+  }
+}
+
+function handleCobwebHover(e) {
+  if (!cobwebCanvas) return;
+  const rect = cobwebCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if (mouseX < 0 || mouseX > rect.width || mouseY < 0 || mouseY > rect.height) {
+    hideCobwebTooltip();
+    return;
+  }
+
+  const cx = rect.width / 2 + cobwebPan.x;
+  const cy = rect.height / 2 + cobwebPan.y;
+
+  // Check hover on task nodes
+  let hoveredNode = null;
+  for (const node of cobwebTaskNodes) {
+    const nx = cx + Math.cos(node.currentAngle) * node.dist;
+    const ny = cy + Math.sin(node.currentAngle) * node.dist;
+    const dist = Math.hypot(mouseX - nx, mouseY - ny);
+    if (dist < 22) {
+      hoveredNode = { node, screenX: nx + rect.left, screenY: ny + rect.top };
+      break;
+    }
+  }
+
+  if (hoveredNode) {
+    showCobwebTooltip(hoveredNode);
+  } else {
+    hideCobwebTooltip();
+  }
+}
+
+function showCobwebTooltip({ node, screenX, screenY }) {
+  const tip = document.getElementById("cobweb-node-tooltip");
+  if (!tip) return;
+  const statusLabel =
+    node.status === "running" ? "실행 중" : node.status === "completed" ? "완료" : node.status === "failed" ? "실패" : "대기";
+  tip.innerHTML = `
+    <strong>${escapeHtml(node.name)}</strong><br>
+    스킬: <code>${escapeHtml(node.skill)}</code> · 상태: ${statusLabel}
+  `;
+  tip.style.left = `${screenX}px`;
+  tip.style.top = `${screenY - 12}px`;
+  tip.classList.remove("hidden");
+}
+
+function hideCobwebTooltip() {
+  const tip = document.getElementById("cobweb-node-tooltip");
+  if (tip) tip.classList.add("hidden");
+}
+
+function renderCobwebFrame() {
+  if (!cobwebCanvas || !cobwebCtx) {
+    cobwebAnimFrame = requestAnimationFrame(renderCobwebFrame);
+    return;
+  }
+
+  const rect = cobwebCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const targetBufferW = Math.round(rect.width * dpr);
+  const targetBufferH = Math.round(rect.height * dpr);
+
+  if (cobwebCanvas.width !== targetBufferW || cobwebCanvas.height !== targetBufferH) {
+    cobwebCanvas.width = targetBufferW;
+    cobwebCanvas.height = targetBufferH;
+  }
+
+  const w = rect.width;
+  const h = rect.height;
+
+  if (w <= 0 || h <= 0) {
+    cobwebAnimFrame = requestAnimationFrame(renderCobwebFrame);
+    return;
+  }
+
+  cobwebCtx.save();
+  cobwebCtx.scale(dpr, dpr);
+  cobwebCtx.clearRect(0, 0, w, h);
+
+  const cx = w / 2 + cobwebPan.x;
+  const cy = h / 2 + cobwebPan.y;
+  const isDark = document.documentElement.dataset.theme === "dark";
+
+  // Palette colors based on comfortable Warm Paper & Dark Chat Ground
+  const colorCore = isDark ? "#D97757" : "#C15F3C";
+  const colorLine = isDark ? "rgba(217, 119, 87, 0.22)" : "rgba(193, 95, 60, 0.20)";
+  const colorPending = isDark ? "#76726A" : "#8C8980";
+  const colorRunning = isDark ? "#E48769" : "#C15F3C";
+  const colorDone = isDark ? "#22C55E" : "#16A34A";
+
+  const time = performance.now() * 0.001;
+
+  // Dynamically scale task nodes orbit radius with canvas dimensions
+  if (cobwebTaskNodes.length > 0) {
+    const targetOrbitRadius = Math.max(95, Math.min(210, Math.min(w * 0.22, h * 0.36) + cobwebTaskNodes.length * 6));
+    cobwebTaskNodes.forEach((node) => {
+      node.dist += (targetOrbitRadius - node.dist) * 0.08;
+    });
+  }
+
+  // 1. Draw Ambient Floating Dots & subtle mesh lines
+  const maxAmbientX = Math.min(w * 0.44, 560);
+  const maxAmbientY = Math.min(h * 0.40, 260);
+
+  for (let i = 0; i < cobwebAmbientDots.length; i++) {
+    const dot = cobwebAmbientDots[i];
+    dot.x += dot.vx;
+    dot.y += dot.vy;
+
+    // Boundary bounce
+    if (Math.abs(dot.x) > maxAmbientX) dot.vx *= -1;
+    if (Math.abs(dot.y) > maxAmbientY) dot.vy *= -1;
+
+    const dx = cx + dot.x;
+    const dy = cy + dot.y;
+
+    cobwebCtx.beginPath();
+    cobwebCtx.arc(dx, dy, dot.radius, 0, Math.PI * 2);
+    cobwebCtx.fillStyle = isDark
+      ? `rgba(232, 228, 220, ${dot.alpha * 0.7})`
+      : `rgba(102, 100, 94, ${dot.alpha * 0.6})`;
+    cobwebCtx.fill();
+
+    // Connect close ambient dots (cobweb effect)
+    for (let j = i + 1; j < cobwebAmbientDots.length; j++) {
+      const other = cobwebAmbientDots[j];
+      const dist = Math.hypot(dot.x - other.x, dot.y - other.y);
+      if (dist < 65) {
+        cobwebCtx.beginPath();
+        cobwebCtx.moveTo(dx, dy);
+        cobwebCtx.lineTo(cx + other.x, cy + other.y);
+        cobwebCtx.strokeStyle = isDark
+          ? `rgba(232, 228, 220, ${(1 - dist / 65) * 0.06})`
+          : `rgba(102, 100, 94, ${(1 - dist / 65) * 0.08})`;
+        cobwebCtx.lineWidth = 0.75;
+        cobwebCtx.stroke();
+      }
+    }
+  }
+
+  // 2. Draw Cobweb Nexus Lines between Core and Task Nodes
+  cobwebTaskNodes.forEach((node, i) => {
+    // Subtle organic floating movement
+    const floatVal = Math.sin(time * 1.5 + node.floatOffset) * 4;
+    const actualDist = node.dist + floatVal;
+    const nx = cx + Math.cos(node.currentAngle) * actualDist;
+    const ny = cy + Math.sin(node.currentAngle) * actualDist;
+
+    // Line from Core to Task Dot
+    cobwebCtx.beginPath();
+    cobwebCtx.moveTo(cx, cy);
+    cobwebCtx.lineTo(nx, ny);
+    cobwebCtx.strokeStyle = node.status === "running" ? colorRunning : colorLine;
+    cobwebCtx.lineWidth = node.status === "running" ? 1.6 : 1.1;
+    cobwebCtx.setLineDash(node.status === "pending" ? [3, 3] : []);
+    cobwebCtx.stroke();
+    cobwebCtx.setLineDash([]);
+
+    // Line to next neighboring task dot (Spider Cobweb Outer Ring)
+    const nextNode = cobwebTaskNodes[(i + 1) % cobwebTaskNodes.length];
+    if (nextNode && cobwebTaskNodes.length > 1) {
+      const nextFloat = Math.sin(time * 1.5 + nextNode.floatOffset) * 4;
+      const nextX = cx + Math.cos(nextNode.currentAngle) * (nextNode.dist + nextFloat);
+      const nextY = cy + Math.sin(nextNode.currentAngle) * (nextNode.dist + nextFloat);
+
+      cobwebCtx.beginPath();
+      cobwebCtx.moveTo(nx, ny);
+      cobwebCtx.lineTo(nextX, nextY);
+      cobwebCtx.strokeStyle = isDark ? "rgba(255, 121, 75, 0.15)" : "rgba(255, 121, 75, 0.12)";
+      cobwebCtx.lineWidth = 0.85;
+      cobwebCtx.stroke();
+    }
+  });
+
+  // 3. Draw Flowing Signal Particles
+  for (let i = cobwebParticles.length - 1; i >= 0; i--) {
+    const p = cobwebParticles[i];
+    p.progress += p.speed;
+
+    if (p.progress >= 1.0) {
+      cobwebParticles.splice(i, 1);
+      continue;
+    }
+
+    const node = p.targetNode;
+    if (!node) continue;
+
+    const nx = cx + Math.cos(node.currentAngle) * node.dist;
+    const ny = cy + Math.sin(node.currentAngle) * node.dist;
+
+    const px = cx + (nx - cx) * p.progress;
+    const py = cy + (ny - cy) * p.progress;
+
+    cobwebCtx.beginPath();
+    cobwebCtx.arc(px, py, 2.5, 0, Math.PI * 2);
+    cobwebCtx.fillStyle = colorCore;
+    cobwebCtx.shadowColor = colorCore;
+    cobwebCtx.shadowBlur = 6;
+    cobwebCtx.fill();
+    cobwebCtx.shadowBlur = 0;
+  }
+
+  // 4. Draw Core Hub Node (ASO Orchestrator Hub)
+  cobwebCoreNode.pulse += 0.035;
+  const corePulseRadius = cobwebCoreNode.radius + (Math.sin(cobwebCoreNode.pulse) + 1) * 3;
+
+  // Pulse ring
+  cobwebCtx.beginPath();
+  cobwebCtx.arc(cx, cy, corePulseRadius + 4, 0, Math.PI * 2);
+  cobwebCtx.strokeStyle = isDark ? "rgba(217, 119, 87, 0.35)" : "rgba(193, 95, 60, 0.30)";
+  cobwebCtx.lineWidth = 1.2;
+  cobwebCtx.stroke();
+
+  // Core Main Dot
+  cobwebCtx.beginPath();
+  cobwebCtx.arc(cx, cy, cobwebCoreNode.radius, 0, Math.PI * 2);
+  cobwebCtx.fillStyle = colorCore;
+  cobwebCtx.shadowColor = colorCore;
+  cobwebCtx.shadowBlur = 10;
+  cobwebCtx.fill();
+  cobwebCtx.shadowBlur = 0;
+
+  // Core Dot Inner Core
+  cobwebCtx.beginPath();
+  cobwebCtx.arc(cx, cy, 5, 0, Math.PI * 2);
+  cobwebCtx.fillStyle = "#FFFFFF";
+  cobwebCtx.fill();
+
+  // Core Label
+  cobwebCtx.font = "600 11px Pretendard, system-ui, sans-serif";
+  cobwebCtx.fillStyle = isDark ? "#E8E4DC" : "#141413";
+  cobwebCtx.textAlign = "center";
+  cobwebCtx.fillText("ASO Core", cx, cy + 26);
+
+  // 5. Draw Task Nodes (Parallel Task Dots)
+  cobwebTaskNodes.forEach((node) => {
+    const floatVal = Math.sin(time * 1.5 + node.floatOffset) * 4;
+    const nx = cx + Math.cos(node.currentAngle) * (node.dist + floatVal);
+    const ny = cy + Math.sin(node.currentAngle) * (node.dist + floatVal);
+
+    const nodeColor =
+      node.status === "completed"
+        ? colorDone
+        : node.status === "running"
+        ? colorRunning
+        : node.status === "failed"
+        ? "#DC2626"
+        : colorPending;
+
+    // Running pulse wave
+    if (node.status === "running") {
+      node.pulse += 0.05;
+      const pulseR = 9 + (Math.sin(node.pulse) + 1) * 4;
+      cobwebCtx.beginPath();
+      cobwebCtx.arc(nx, ny, pulseR, 0, Math.PI * 2);
+      cobwebCtx.strokeStyle = colorRunning;
+      cobwebCtx.lineWidth = 1.2;
+      cobwebCtx.stroke();
+    }
+
+    // Task Dot Circle
+    cobwebCtx.beginPath();
+    cobwebCtx.arc(nx, ny, 8.5, 0, Math.PI * 2);
+    cobwebCtx.fillStyle = nodeColor;
+    cobwebCtx.shadowColor = nodeColor;
+    cobwebCtx.shadowBlur = node.status === "running" ? 8 : 3;
+    cobwebCtx.fill();
+    cobwebCtx.shadowBlur = 0;
+
+    // Inner White Dot
+    cobwebCtx.beginPath();
+    cobwebCtx.arc(nx, ny, 3, 0, Math.PI * 2);
+    cobwebCtx.fillStyle = "#FFFFFF";
+    cobwebCtx.fill();
+
+    // Node Name Label
+    cobwebCtx.font = "500 10.5px Pretendard, system-ui, sans-serif";
+    cobwebCtx.fillStyle = isDark ? "#A8A49C" : "#66645E";
+    cobwebCtx.textAlign = "center";
+    const shortLabel = node.name.length > 12 ? node.name.slice(0, 11) + ".." : node.name;
+    cobwebCtx.fillText(shortLabel, nx, ny + 18);
+  });
+
+  cobwebCtx.restore();
+  cobwebAnimFrame = requestAnimationFrame(renderCobwebFrame);
+}
+
+// ==========================================================================
+// Navigation & Tab Switching
+// ==========================================================================
+
+function switchNavTab(tabId) {
+  if (tabId === "custom") {
+    openSettingsModal();
+    return;
+  }
+  switchTab(tabId);
+}
+
+function focusSearchInput() {
+  switchTab("chat");
+  const input = document.getElementById("run-request-input");
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function switchTab(tabId) {
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".view-panel").forEach((sec) => {
+    sec.classList.remove("active");
+  });
+  const target = document.getElementById(`view-${tabId}`);
+  if (target) {
+    target.classList.add("active");
+  }
+
+  // Load view-specific data
+  if (tabId === "connections") loadConnections();
+  if (tabId === "runner") loadRunners();
+  if (tabId === "usage") loadUsage();
+}
+
+document.querySelectorAll(".nav-item").forEach((btn) => {
+  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+});
+
+// ==========================================================================
+// Initialization
+// ==========================================================================
+
+async function init() {
+  initTheme();
+  initSidebarState();
+  initModelPicker();
+  initCobwebCanvas();
+  setupComposerListeners();
+  initComposerDragAndDrop();
+
+  // Instant render cached sessions from localStorage before network calls
+  try {
+    const cached = JSON.parse(localStorage.getItem("gon.sessions_cache") || "[]");
+    if (Array.isArray(cached) && cached.length > 0) {
+      cachedSessions = cached;
+      renderSidebarSessions(cached);
+    }
+  } catch {}
+
+  try {
+    // 1. Fetch user profile
+    const meRes = await fetch(`${API_URL}/me`);
+    if (meRes.ok) {
+      const me = await meRes.json();
+      const displayName = (me.displayName && me.displayName !== "Default Developer") ? me.displayName : "이재곤";
+      const nameEl = document.getElementById("user-display-name");
+      const avatarEl = document.getElementById("user-avatar");
+      const greetingEl = document.getElementById("greeting-title");
+
+      if (nameEl) nameEl.textContent = `${displayName} - Pro`;
+      if (avatarEl) avatarEl.textContent = displayName.charAt(0);
+      if (greetingEl) greetingEl.textContent = `${displayName}님, 안녕하세요`;
+
+      const menuNameEl = document.getElementById("profile-menu-name");
+      const menuAvatarEl = document.getElementById("profile-menu-avatar");
+      if (menuNameEl) menuNameEl.textContent = displayName;
+      if (menuAvatarEl) menuAvatarEl.textContent = displayName.charAt(0);
+    }
+
+    // 2. Fetch workspaces
+    const wsRes = await fetch(`${API_URL}/workspaces`);
+    if (wsRes.ok) {
+      const data = await wsRes.json();
+      if (data.items.length > 0) {
+        currentWorkspaceId = data.items[0].id;
+        await loadProjects();
+        await initWorkspaceFolderState();
+        await loadSidebarRuns();
+
+        // Restore active session if preserved in localStorage
+        try {
+          const savedActiveSessionId = localStorage.getItem("gon.active_session_id") || localStorage.getItem("gon.active_run_id");
+          if (savedActiveSessionId) {
+            await viewSession(savedActiveSessionId);
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.error("Initialization error:", err);
+  }
+}
+
+// ==========================================================================
+// Desktop Workspace Directory Selector & State Management
+// ==========================================================================
+
+function normalizePath(p) {
+  if (!p) return "";
+  return p.replace(/\\+/g, "/").replace(/\/+/g, "/").trim();
+}
+
+let rawSavedActivePath = localStorage.getItem("gon.active_workspace_path") || "";
+if (rawSavedActivePath.includes("UsersaicamDesktop")) {
+  rawSavedActivePath = "";
+  try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
+}
+let currentActiveWorkspacePath = normalizePath(rawSavedActivePath);
+let currentRunnerDevice = null;
+let currentAllowedWorkspacePaths = [];
+
+async function initWorkspaceFolderState() {
+  if (!currentWorkspaceId) return;
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        currentRunnerDevice = data.items[0];
+        const pathsRes = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
+        if (pathsRes.ok) {
+          const pathData = await pathsRes.json();
+          currentAllowedWorkspacePaths = (pathData.allowedPaths || [])
+            .map(normalizePath)
+            .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"));
+          const serverActive = normalizePath(pathData.activePath);
+          if (!currentActiveWorkspacePath || !currentAllowedWorkspacePaths.includes(currentActiveWorkspacePath)) {
+            currentActiveWorkspacePath = serverActive && !serverActive.includes("UsersaicamDesktop")
+              ? serverActive
+              : (currentAllowedWorkspacePaths[0] || "");
+            try {
+              localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
+            } catch {}
+          }
+        }
+      } else {
+        currentRunnerDevice = null;
+        currentAllowedWorkspacePaths = [];
+        currentActiveWorkspacePath = "";
+        try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
+      }
+    }
+  } catch (err) {
+    console.error("Workspace folder init error:", err);
+  }
+  renderWorkspaceChip();
+}
+
+function renderWorkspaceChip() {
+  const labelEl = document.getElementById("composer-folder-btn-label");
+  const btnEl = document.getElementById("composer-folder-btn");
+  if (!labelEl) return;
+
+  if (!currentActiveWorkspacePath) {
+    labelEl.textContent = "작업 폴더";
+    if (btnEl) btnEl.title = "데스크탑 작업 폴더 선택";
+    return;
+  }
+
+  const norm = normalizePath(currentActiveWorkspacePath);
+  const parts = norm.split("/").filter(Boolean);
+  const folderName = parts.length > 0 ? parts[parts.length - 1] : norm;
+
+  labelEl.textContent = folderName;
+  if (btnEl) {
+    btnEl.title = `데스크탑 작업 폴더: ${norm} (클릭하여 변경)`;
+  }
+}
+
+async function openWorkspaceFolderModal() {
+  const backdrop = document.getElementById("workspace-modal-backdrop");
+  if (backdrop) backdrop.classList.remove("hidden");
+
+  // Fetch fresh paths and runner device
+  if (currentWorkspaceId) {
+    try {
+      const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items && data.items.length > 0) {
+          currentRunnerDevice = data.items[0];
+          const pathsRes = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
+          if (pathsRes.ok) {
+            const pData = await pathsRes.json();
+            currentAllowedWorkspacePaths = (pData.allowedPaths || [])
+              .map(normalizePath)
+              .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"));
+            const sActive = normalizePath(pData.activePath);
+            if (sActive && !sActive.includes("UsersaicamDesktop")) {
+              currentActiveWorkspacePath = sActive;
+            }
+          }
+        } else {
+          currentRunnerDevice = null;
+          currentAllowedWorkspacePaths = [];
+          currentActiveWorkspacePath = "";
+          try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
+        }
+      }
+    } catch {}
+  }
+
+  // Populate Modal UI
+  const nameEl = document.getElementById("modal-runner-name");
+  const statusEl = document.getElementById("modal-runner-status");
+  const deleteBtn = document.getElementById("modal-runner-delete-btn");
+  if (currentRunnerDevice) {
+    if (nameEl) nameEl.textContent = currentRunnerDevice.name;
+    if (statusEl) {
+      statusEl.textContent = currentRunnerDevice.status === "online" ? "온라인 (정상 연결됨)" : "오프라인";
+      statusEl.className = `badge ${currentRunnerDevice.status === "online" ? "badge-accent" : "badge-sub"}`;
+    }
+    if (deleteBtn) deleteBtn.style.display = "inline-flex";
+  } else {
+    if (nameEl) nameEl.textContent = "연결된 러너 없음 (페어링 필요)";
+    if (statusEl) {
+      statusEl.textContent = "미등록";
+      statusEl.className = "badge badge-sub";
+    }
+    if (deleteBtn) deleteBtn.style.display = "none";
+  }
+
+  const activeBox = document.getElementById("modal-active-path-text");
+  if (activeBox) {
+    activeBox.textContent = currentActiveWorkspacePath ? normalizePath(currentActiveWorkspacePath) : "지정된 로컬 작업 공간이 없습니다.";
+  }
+
+  const listEl = document.getElementById("modal-allowed-paths-list");
+  if (listEl) {
+    const cleanPaths = Array.from(new Set(
+      (currentAllowedWorkspacePaths || [])
+        .map(normalizePath)
+        .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"))
+    ));
+    if (cleanPaths.length === 0) {
+      listEl.innerHTML = `<span class="text-faint text-sm">등록된 허가 폴더가 없습니다. 아래에서 추가하세요.</span>`;
+    } else {
+      listEl.innerHTML = cleanPaths.map(p => {
+        const isActive = p === normalizePath(currentActiveWorkspacePath);
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(var(--c-sunken),0.5);border:1px solid ${isActive ? 'rgba(var(--c-accent),0.6)' : 'rgb(var(--c-line))'};border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;flex:1;" onclick="selectWorkspacePath('${escapeHtml(p)}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              <span style="font-family:monospace;font-size:12px;color:rgb(var(--c-ink));">${escapeHtml(p)}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              ${isActive ? '<span class="badge badge-accent" style="font-size:11px;">현재 활성</span>' : `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;" onclick="selectWorkspacePath('${escapeHtml(p)}')">선택</button>`}
+              <button class="btn btn-ghost btn-sm text-danger" style="font-size:12px;padding:2px 6px;color:rgb(var(--c-danger));" onclick="event.stopPropagation(); removeWorkspacePath('${escapeHtml(p)}')" title="이 폴더 권한 제거">✕</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+}
+
+function closeWorkspaceFolderModal() {
+  const backdrop = document.getElementById("workspace-modal-backdrop");
+  if (backdrop) backdrop.classList.add("hidden");
+}
+
+function closeWorkspaceFolderModalOnBackdrop(event) {
+  if (event.target.id === "workspace-modal-backdrop") {
+    closeWorkspaceFolderModal();
+  }
+}
+
+async function selectWorkspacePath(dirPath) {
+  if (!dirPath) return;
+  const clean = normalizePath(dirPath);
+  currentActiveWorkspacePath = clean;
+  try {
+    localStorage.setItem("gon.active_workspace_path", clean);
+  } catch {}
+
+  if (currentWorkspaceId && currentRunnerDevice) {
+    try {
+      await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/active-path`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: clean })
+      });
+    } catch {}
+  }
+
+  renderWorkspaceChip();
+  closeWorkspaceFolderModal();
+}
+
+async function removeWorkspacePath(dirPath) {
+  if (!dirPath || !currentWorkspaceId || !currentRunnerDevice) return;
+  const clean = normalizePath(dirPath);
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: clean })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentAllowedWorkspacePaths = (data.allowedPaths || []).map(normalizePath);
+      if (currentActiveWorkspacePath === clean) {
+        currentActiveWorkspacePath = currentAllowedWorkspacePaths[0] || "";
+        try { localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath); } catch {}
+      }
+      renderWorkspaceChip();
+      await openWorkspaceFolderModal();
+      showToast("작업 공간 폴더가 제거되었습니다.", "info");
+    }
+  } catch (err) {
+    showToast("폴더 제거 오류: " + err.message, "error");
+  }
+}
+
+async function handleDeleteCurrentRunner() {
+  if (!currentRunnerDevice) return;
+  await deleteRunnerDevice(currentRunnerDevice.id, currentRunnerDevice.name);
+}
+
+async function deleteRunnerDevice(deviceId, deviceName) {
+  if (!deviceId || !currentWorkspaceId) return;
+  const targetName = deviceName || "러너 기기";
+  const confirmed = await showConfirmDialog({
+    title: "러너 기기 등록 해제",
+    message: `'${targetName}' 기기의 등록을 해제하시겠습니까? 등록 해제 시 이 기기와의 로컬 연결이 즉시 종료되며, 다시 사용하려면 새로운 페어링 코드로 연결해야 합니다.`,
+    confirmText: "등록 해제",
+    cancelText: "취소",
+    danger: true
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${deviceId}`, {
+      method: "DELETE"
+    });
+    if (res.ok) {
+      showToast(`'${targetName}' 기기가 등록 해제되었습니다.`, "success");
+      if (currentRunnerDevice && currentRunnerDevice.id === deviceId) {
+        currentRunnerDevice = null;
+        currentAllowedWorkspacePaths = [];
+        currentActiveWorkspacePath = "";
+        try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
+        renderWorkspaceChip();
+      }
+      await loadRunners();
+      const backdrop = document.getElementById("workspace-modal-backdrop");
+      if (backdrop && !backdrop.classList.contains("hidden")) {
+        await openWorkspaceFolderModal();
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast("기기 등록 해제 실패: " + (err.error?.message || res.statusText), "error");
+    }
+  } catch (e) {
+    showToast("기기 등록 해제 오류: " + e.message, "error");
+  }
+}
+
+async function submitNewWorkspacePath() {
+  const input = document.getElementById("modal-new-path-input");
+  const rawVal = input ? input.value.trim() : "";
+  if (!rawVal) {
+    alert("데스크탑 폴더 경로를 입력하세요.");
+    return;
+  }
+  const pathVal = normalizePath(rawVal);
+
+  if (!currentWorkspaceId || !currentRunnerDevice) {
+    selectWorkspacePath(pathVal);
+    if (input) input.value = "";
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: pathVal, setAsActive: true })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentAllowedWorkspacePaths = (data.allowedPaths || []).map(normalizePath);
+      selectWorkspacePath(pathVal);
+      if (input) input.value = "";
+    } else {
+      const err = await res.json();
+      alert("폴더 등록 실패: " + (err.error?.message || res.statusText));
+    }
+  } catch (e) {
+    alert("폴더 등록 오류: " + e.message);
+  }
+}
+
+async function triggerNativeFolderPicker() {
+  if (window.showDirectoryPicker) {
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      if (dirHandle && dirHandle.name) {
+        const input = document.getElementById("modal-new-path-input");
+        if (input) {
+          input.value = dirHandle.name;
+          input.focus();
+        }
+      }
+      return;
+    } catch (e) {
+      return;
+    }
+  }
+  const fileInput = document.getElementById("composer-folder-input");
+  if (fileInput) fileInput.click();
+}
+
+function handleFolderPickerChange(event) {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    const rel = files[0].webkitRelativePath || "";
+    const folderName = rel.split("/")[0] || files[0].name;
+    const input = document.getElementById("modal-new-path-input");
+    if (input) {
+      input.value = folderName;
+      input.focus();
+    }
+  }
+}
+
+// ==========================================================================
+// Projects Loading
+// ==========================================================================
+
+async function loadProjects() {
+  if (!currentWorkspaceId) return;
+  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects`);
+  if (res.ok) {
+    const data = await res.json();
+    const select = document.getElementById("run-project-select");
+    if (select) {
+      select.innerHTML = "";
+      data.items.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.sourceType})`;
+        select.appendChild(opt);
+      });
+      if (data.items.length > 0) {
+        currentProjectId = data.items[0].id;
+      }
+    }
+  }
+}
+
+// ==========================================================================
+// Composer Listeners & New Conversation
+// ==========================================================================
+
+function setupComposerListeners() {
+  const textarea = document.getElementById("run-request-input");
+  if (!textarea) return;
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.isComposing) return;
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submitChatPrompt();
+    }
+  });
+
+  textarea.addEventListener("input", () => {
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+  });
+}
+
+function startNewConversation() {
+  switchTab("chat");
+  const chatView = document.getElementById("view-chat");
+  const thread = document.getElementById("chat-thread");
+  const input = document.getElementById("run-request-input");
+
+  if (chatView) {
+    chatView.classList.add("empty-mode");
+  }
+  if (thread) {
+    thread.innerHTML = "";
+  }
+  if (input) {
+    input.value = "";
+    input.style.height = "auto";
+    input.focus();
+  }
+
+  if (activeEventSource) {
+    activeEventSource.close();
+    activeEventSource = null;
+  }
+  activeSessionId = null;
+  activeRunId = null;
+  try {
+    localStorage.removeItem("gon.active_session_id");
+    localStorage.removeItem("gon.active_run_id");
+  } catch {}
+  resetCobweb();
+  renderSidebarSessions(cachedSessions);
+}
+
+// ==========================================================================
+// Direct Chat Execution & WorkProcess Lifecycle
+// ==========================================================================
+
+let attachedFiles = [];
+
+function triggerFilePicker() {
+  const input = document.getElementById("composer-file-input");
+  if (input) input.click();
+}
+
+function handleFileSelected(event) {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    addFilesToAttachments(Array.from(files));
+  }
+  event.target.value = "";
+}
+
+function addFilesToAttachments(fileList) {
+  fileList.forEach((file) => {
+    const isImage = file.type.startsWith("image/");
+    const reader = new FileReader();
+
+    if (isImage) {
+      reader.onload = (e) => {
+        attachedFiles.push({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: e.target.result,
+          isImage: true
+        });
+        renderAttachmentsPreview();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      reader.onload = (e) => {
+        attachedFiles.push({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          text: typeof e.target.result === "string" ? e.target.result : "",
+          isImage: false
+        });
+        renderAttachmentsPreview();
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+function removeAttachment(index) {
+  attachedFiles.splice(index, 1);
+  renderAttachmentsPreview();
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes < 0) return "0 B";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function renderAttachmentsPreview() {
+  const bar = document.getElementById("composer-attachments-bar");
+  if (!bar) return;
+
+  if (attachedFiles.length === 0) {
+    bar.innerHTML = "";
+    bar.classList.add("hidden");
+    return;
+  }
+
+  bar.classList.remove("hidden");
+  bar.innerHTML = attachedFiles
+    .map((file, idx) => {
+      const thumb = file.isImage
+        ? `<img src="${file.dataUrl}" alt="${escapeHtml(file.name)}" class="attachment-chip-thumb" />`
+        : `<svg class="attachment-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+      return `
+        <div class="composer-attachment-chip">
+          ${thumb}
+          <div class="attachment-chip-info">
+            <span class="attachment-chip-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+            <span class="attachment-chip-size">${formatBytes(file.size)}</span>
+          </div>
+          <button type="button" class="attachment-chip-del" onclick="removeAttachment(${idx})" title="삭제">×</button>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function initComposerDragAndDrop() {
+  const wrapper = document.getElementById("composer-wrapper");
+  if (!wrapper) return;
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    wrapper.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.add("drag-over");
+    });
+  });
+
+  ["dragleave", "drop"].forEach((eventName) => {
+    wrapper.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.remove("drag-over");
+    });
+  });
+
+  wrapper.addEventListener("drop", (e) => {
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      addFilesToAttachments(Array.from(files));
+    }
+  });
+}
+
+function isLikelyChat(prompt) {
+  const text = prompt.trim().toLowerCase();
+  const buildKeywords = [
+    "만들어", "만들기", "작성해", "작성하기", "구현해", "구현하기", "수정해", "수정하기",
+    "추가해", "추가하기", "분석해", "분석하기", "리팩토링", "계획", "설계", "개발해",
+    "고쳐줘", "고치기", "빌드", "배포", "테스트", "코드", "파일", "컴포넌트", "함수",
+    "클래스", "버그", "에러", "스크립트", "엔드포인트", "마이그레이션", "아키텍처",
+    "create", "build", "make", "implement", "add", "fix", "refactor", "plan",
+    "design", "develop", "code", "file", "test", "debug", "error", "write", "generate"
+  ];
+  const hasBuild = buildKeywords.some((kw) => text.includes(kw));
+  if (hasBuild) return false;
+  return text.length <= 30 || /ㅎㅇ|안녕|반가워|누구|소개|날씨|고마워|감사|hi|hello|hey/i.test(text);
+}
+
+async function submitChatPrompt() {
+  const input = document.getElementById("run-request-input");
+  if (!input) return;
+  const requestText = input.value.trim();
+  if (!requestText && attachedFiles.length === 0) return;
+
+  const currentAttachments = [...attachedFiles];
+  attachedFiles = [];
+  renderAttachmentsPreview();
+
+  // Clear input and reset height
+  input.value = "";
+  input.style.height = "auto";
+
+  // Switch chat view to active conversation mode (leaves empty mode)
+  const chatView = document.getElementById("view-chat");
+  if (chatView) chatView.classList.remove("empty-mode");
+
+  const thread = document.getElementById("chat-thread");
+  if (!thread) return;
+
+  // 1. Append User Message Bubble with attached files / images
+  const userRow = document.createElement("div");
+  userRow.className = "user-message-row";
+
+  let attachmentsHtml = "";
+  if (currentAttachments.length > 0) {
+    attachmentsHtml = `<div class="user-attachments-grid">` +
+      currentAttachments.map((f) => {
+        if (f.isImage) {
+          return `<img src="${f.dataUrl}" alt="${escapeHtml(f.name)}" class="user-attachment-img" />`;
+        }
+        return `
+          <div class="user-attachment-card">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span>${escapeHtml(f.name)} (${formatBytes(f.size)})</span>
+          </div>
+        `;
+      }).join("") + `</div>`;
+  }
+
+  const textHtml = requestText ? `<div>${escapeHtml(requestText)}</div>` : "";
+  userRow.innerHTML = `<div class="user-bubble">${attachmentsHtml}${textHtml}</div>`;
+  thread.appendChild(userRow);
+
+  const isChat = isLikelyChat(requestText);
+  const tempId = "run-" + Date.now();
+  const assistantTurn = document.createElement("div");
+  assistantTurn.className = "assistant-turn";
+  assistantTurn.id = `turn-${tempId}`;
+  assistantTurn.innerHTML = `
+    <div class="assistant-row">
+      <img src="/logo.webp" alt="Gon" class="assistant-avatar" width="24" height="24">
+      <div class="assistant-main">
+        <!-- WorkProcess Accordion (side_pj & Claude style with subtle left border line) -->
+        <div class="work-process-wrap ${isChat ? 'hidden' : ''}" id="process-wrap-${tempId}">
+          <button type="button" class="work-process-toggle-btn" onclick="toggleWorkProcess('${tempId}')">
+            <span class="working-dot" id="dot-${tempId}"></span>
+            <span class="work-process-title" id="process-status-text-${tempId}">요구사항 구체화 중...</span>
+            <svg class="chevron-icon open" id="arrow-${tempId}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <div class="work-process-drawer" id="drawer-${tempId}">
+            <div class="work-process-inner">
+              <!-- Section: Requirements -->
+              <div class="process-sub-item hidden" id="sec-req-${tempId}">
+                <div class="process-sub-label">요구사항 구체화</div>
+                <div class="req-content-box" id="req-content-${tempId}"></div>
+              </div>
+
+              <!-- Section: Tasks DAG -->
+              <div class="process-sub-item hidden" id="sec-tasks-${tempId}">
+                <div class="process-sub-label">실행 계획 DAG</div>
+                <div class="tasks-flow-box" id="tasks-content-${tempId}"></div>
+              </div>
+
+              <!-- Section: Approval Gate Banner -->
+              <div class="approval-gate-box hidden" id="gate-${tempId}">
+                <span>작업 계획이 수립되었습니다. 승인 후 코드를 실행합니다.</span>
+                <button class="btn btn-accent btn-sm" onclick="approvePlanInTurn('${tempId}')">계획 승인</button>
+              </div>
+
+              <!-- Section: Terminal Stream Log -->
+              <div class="process-sub-item">
+                <div class="process-sub-label">실행 스트림 로그</div>
+                <div class="terminal-box" id="term-${tempId}">스트림 대기 중...</div>
+              </div>
+
+              <!-- Section: File Diffs -->
+              <div class="process-sub-item hidden" id="sec-diff-${tempId}">
+                <div class="process-sub-label">생성된 파일 Diff</div>
+                <div class="diff-box-inner" id="diff-content-${tempId}"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Assistant Response Text (Clean Markdown without box border) -->
+        <div class="report-viewer" id="response-${tempId}">
+          ${isChat ? 'Gon이 답변을 작성하고 있습니다...' : '작업 환경을 준비하고 있습니다...'}
+        </div>
+      </div>
+    </div>
+  `;
+  thread.appendChild(assistantTurn);
+  scrollChatToBottom();
+
+  // Ensure active session exists, or initialize a new one
+  if (!activeSessionId) {
+    const uuid = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    activeSessionId = "sess-" + uuid;
+    try {
+      localStorage.setItem("gon.active_session_id", activeSessionId);
+    } catch {}
+  }
+
+  const mode = document.getElementById("run-mode-select") ? document.getElementById("run-mode-select").value : "auto";
+  const requireApproval = document.getElementById("run-approval-check") ? document.getElementById("run-approval-check").checked : true;
+
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request: requestText || (currentAttachments.length > 0 ? `${currentAttachments.map(f => f.name).join(", ")} 파일 확인` : "요청"),
+        sessionId: activeSessionId,
+        workspacePath: currentActiveWorkspacePath || undefined,
+        executionMode: mode,
+        providerPreference: currentSelectedModel || "auto",
+        attachments: currentAttachments.map(f => ({
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          dataUrl: f.dataUrl,
+          text: f.text
+        })),
+        options: { requirePlanApproval: requireApproval }
+      })
+    });
+
+    if (!res.ok) {
+      updateTurnStatus(tempId, "요청 처리 실패", false);
+      const respEl = document.getElementById(`response-${tempId}`);
+      if (respEl) respEl.textContent = "작업 생성에 실패했습니다. API 서버 상태를 확인하세요.";
+      return;
+    }
+
+    const data = await res.json();
+    const actualRunId = data.runId;
+    activeRunId = actualRunId;
+    if (data.sessionId) {
+      activeSessionId = data.sessionId;
+      try {
+        localStorage.setItem("gon.active_session_id", data.sessionId);
+      } catch {}
+    }
+    try {
+      localStorage.setItem("gon.active_run_id", actualRunId);
+    } catch {}
+
+    rebindTurnIds(tempId, actualRunId);
+    await loadSidebarRuns();
+    connectRunSSE(actualRunId);
+  } catch (err) {
+    console.error("Submit error:", err);
+    updateTurnStatus(tempId, "네트워크 오류 발생", false);
+    const respEl = document.getElementById(`response-${tempId}`);
+    if (respEl) respEl.textContent = "서버 연결에 실패했습니다: " + err.message;
+  }
+}
+
+function rebindTurnIds(oldId, newId) {
+  const turn = document.getElementById(`turn-${oldId}`);
+  if (!turn) return;
+  turn.id = `turn-${newId}`;
+
+  const prefixes = [
+    "process-wrap-", "dot-", "process-status-text-", "arrow-",
+    "drawer-", "sec-req-", "req-content-", "sec-tasks-",
+    "tasks-content-", "gate-", "term-", "sec-diff-",
+    "diff-content-", "response-"
+  ];
+
+  prefixes.forEach((prefix) => {
+    const el = document.getElementById(`${prefix}${oldId}`);
+    if (el) el.id = `${prefix}${newId}`;
+  });
+
+  const toggleBtn = turn.querySelector(".work-process-toggle-btn");
+  if (toggleBtn) {
+    toggleBtn.onclick = () => toggleWorkProcess(newId);
+  }
+  const gateBtn = turn.querySelector(".approval-gate-box button");
+  if (gateBtn) {
+    gateBtn.onclick = () => approvePlanInTurn(newId);
+  }
+}
+
+function toggleWorkProcess(runId) {
+  const drawer = document.getElementById(`drawer-${runId}`);
+  const arrow = document.getElementById(`arrow-${runId}`);
+  if (drawer && arrow) {
+    const isHidden = drawer.classList.toggle("hidden");
+    arrow.classList.toggle("open", !isHidden);
+  }
+}
+
+function appendLogToTurn(runId, evType, dataStr) {
+  const t = document.getElementById(`term-${runId}`);
+  if (t) {
+    const time = new Date().toLocaleTimeString();
+    t.textContent += `[${time}] [${evType}] ${dataStr}\n`;
+    t.scrollTop = t.scrollHeight;
+  }
+}
+
+function connectRunSSE(runId) {
+  if (activeEventSource) {
+    activeEventSource.close();
+  }
+
+  const sseUrl = `${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/events`;
+  activeEventSource = new EventSource(sseUrl);
+
+  const term = document.getElementById(`term-${runId}`);
+  if (term) term.textContent = "";
+
+  const appendLog = (evType, dataStr) => appendLogToTurn(runId, evType, dataStr);
+
+  activeEventSource.addEventListener("run:classified", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload.mode === "chat") {
+        const wrap = document.getElementById(`process-wrap-${runId}`);
+        if (wrap) wrap.classList.add("hidden");
+        updateCobwebBadge("일상 대화");
+      }
+    } catch {}
+    appendLog("run:classified", e.data);
+  });
+
+  activeEventSource.addEventListener("chat:response", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload.text) {
+        setResponseText(runId, payload.text);
+      }
+    } catch {
+      setResponseText(runId, e.data);
+    }
+    const wrap = document.getElementById(`process-wrap-${runId}`);
+    if (wrap) wrap.classList.add("hidden");
+    scrollChatToBottom();
+  });
+
+  activeEventSource.addEventListener("run:refining", (e) => {
+    updateTurnStatus(runId, "요구사항 구체화 중...", true);
+    setResponseText(runId, "요구사항을 분석하고 핵심 목표와 기술 제약 조건을 수립하고 있습니다.");
+    appendLog("run:refining", e.data);
+  });
+
+  activeEventSource.addEventListener("requirements:refined", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      renderRequirementsInTurn(runId, payload.requirements);
+      updateTurnStatus(runId, "요구사항 정립 완료 (실행 계획 설계 중...)", true);
+      setResponseText(runId, "요구사항 정립이 완료되었습니다. 작업을 분할하여 실행 계획(DAG)을 구성합니다.");
+      appendLog("requirements:refined", "목표/제약/기준 정립 완료");
+    } catch {
+      appendLog("requirements:refined", e.data);
+    }
+  });
+
+  activeEventSource.addEventListener("plan:created", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      renderTasksInTurn(runId, payload.tasks);
+      setCobwebTasks(payload.tasks);
+      updateTurnStatus(runId, `작업 계획 수립 완료 (${payload.tasks.length}개 단계)`, true);
+      setResponseText(runId, `${payload.tasks.length}개의 실행 단계가 준비되었습니다.`);
+      appendLog("plan:created", `${payload.tasks.length} tasks ready`);
+    } catch {
+      appendLog("plan:created", e.data);
+    }
+  });
+
+  activeEventSource.addEventListener("run:awaiting_approval", (e) => {
+    updateTurnStatus(runId, "계획 승인 대기 중", false);
+    const gate = document.getElementById(`gate-${runId}`);
+    if (gate) gate.classList.remove("hidden");
+    setResponseText(runId, "작업 계획이 수립되었습니다. 상단 실행 과정의 '계획 승인' 버튼을 누르면 구현이 시작됩니다.");
+    appendLog("run:awaiting_approval", "사용자 승인 대기");
+  });
+
+  activeEventSource.addEventListener("plan:approved", (e) => {
+    updateTurnStatus(runId, "계획 승인 완료 (전문가 스킬 조율 중)", true);
+    const gate = document.getElementById(`gate-${runId}`);
+    if (gate) gate.classList.add("hidden");
+    setResponseText(runId, "계획이 승인되었습니다. 선정된 스킬을 적용하여 코드를 구현합니다.");
+    appendLog("plan:approved", "계획 승인 완료");
+  });
+
+  activeEventSource.addEventListener("task:started", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      updateTurnStatus(runId, `Task 실행 중: ${payload.taskKey || ""}`, true);
+      markTaskRunning(runId, payload.taskKey);
+      setCobwebTaskStatus(payload.taskKey, "running");
+      appendLog("task:started", payload.taskKey || e.data);
+    } catch {
+      appendLog("task:started", e.data);
+    }
+  });
+
+  activeEventSource.addEventListener("task:skills_routed", (e) => {
+    appendLog("task:skills_routed", e.data);
+  });
+
+  activeEventSource.addEventListener("task:diff_generated", async (e) => {
+    appendLog("task:diff_generated", e.data);
+    await loadDiffsInTurn(runId);
+  });
+
+  activeEventSource.addEventListener("task:completed", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      markTaskCompleted(runId, payload.taskKey);
+      setCobwebTaskStatus(payload.taskKey, "completed");
+      appendLog("task:completed", payload.taskKey || e.data);
+    } catch {
+      appendLog("task:completed", e.data);
+    }
+  });
+
+  activeEventSource.addEventListener("run:verifying", (e) => {
+    updateTurnStatus(runId, "결과 검증 및 테스트 중...", true);
+    setResponseText(runId, "코드 작성이 완료되어 테스트 및 결과 무결성을 검증하고 있습니다.");
+    appendLog("run:verifying", "검증 시작");
+  });
+
+  activeEventSource.addEventListener("run:completed", async (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload.output) {
+        setResponseText(runId, payload.output);
+        const wrap = document.getElementById(`process-wrap-${runId}`);
+        if (wrap) wrap.classList.add("hidden");
+      } else {
+        updateTurnStatus(runId, "작업 및 검증 완료", false);
+        setCobwebAllDone();
+        await loadDiffsInTurn(runId);
+      }
+    } catch {
+      updateTurnStatus(runId, "작업 및 검증 완료", false);
+    }
+    appendLog("run:completed", "작업 완료");
+    updateCobwebBadge("대기 중");
+    await loadSidebarRuns();
+    await loadUsage();
+    scrollChatToBottom();
+  });
+
+  activeEventSource.addEventListener("run:failed", (e) => {
+    updateTurnStatus(runId, "작업 실패", false);
+    setResponseText(runId, "작업 실행 중 오류가 발생했습니다. 상단 실행 과정의 터미널 로그를 확인하세요.");
+    appendLog("run:failed", e.data);
+    loadSidebarRuns();
+  });
+
+  const otherEvents = ["run:executing", "task:progress", "task:test_completed"];
+  otherEvents.forEach((type) => {
+    activeEventSource.addEventListener(type, (e) => {
+      appendLog(type, e.data);
+    });
+  });
+}
+
+function updateTurnStatus(runId, text, isWorking) {
+  const statusEl = document.getElementById(`process-status-text-${runId}`);
+  if (statusEl) statusEl.textContent = text;
+  const dot = document.getElementById(`dot-${runId}`);
+  if (dot) {
+    if (isWorking) {
+      dot.className = "working-dot";
+      dot.style.display = "inline-block";
+    } else {
+      dot.className = "working-dot";
+      dot.style.animation = "none";
+      dot.style.opacity = "0.7";
+    }
+  }
+}
+
+function setResponseText(runId, text) {
+  const respEl = document.getElementById(`response-${runId}`);
+  if (respEl) {
+    respEl.textContent = text;
+  }
+}
+
+function renderRequirementsInTurn(runId, reqs) {
+  const sec = document.getElementById(`sec-req-${runId}`);
+  const content = document.getElementById(`req-content-${runId}`);
+  if (!sec || !content || !reqs) return;
+  sec.classList.remove("hidden");
+
+  let html = "";
+  if (reqs.goals && reqs.goals.length > 0) {
+    html += `<div><strong>핵심 목표 (Goals):</strong></div>`;
+    html += reqs.goals.map((g) => `<div style="margin-left:8px;">• ${escapeHtml(g)}</div>`).join("");
+  }
+  if (reqs.constraints && reqs.constraints.length > 0) {
+    html += `<div style="margin-top:6px;"><strong>기술 제약 (Constraints):</strong></div>`;
+    html += reqs.constraints.map((c) => `<div style="margin-left:8px;">• ${escapeHtml(c)}</div>`).join("");
+  }
+  if (reqs.acceptanceCriteria && reqs.acceptanceCriteria.length > 0) {
+    html += `<div style="margin-top:6px;"><strong>완료 기준 (Acceptance Criteria):</strong></div>`;
+    html += reqs.acceptanceCriteria.map((a) => `<div style="margin-left:8px;">• ${escapeHtml(a)}</div>`).join("");
+  }
+  content.innerHTML = html;
+}
+
+function renderTasksInTurn(runId, tasks) {
+  const sec = document.getElementById(`sec-tasks-${runId}`);
+  const content = document.getElementById(`tasks-content-${runId}`);
+  if (!sec || !content || !tasks) return;
+  sec.classList.remove("hidden");
+
+  content.innerHTML = tasks.map((t, idx) => `
+    <div class="task-item-row" id="task-row-${runId}-${t.key}">
+      <div>
+        <div class="task-item-title">${idx + 1}. ${escapeHtml(t.title)}</div>
+        <div class="task-item-deps">Key: <code>${escapeHtml(t.key)}</code> · 의존성: ${t.deps && t.deps.length ? escapeHtml(t.deps.join(", ")) : "독립"}</div>
+      </div>
+      <span class="badge badge-sub" id="task-badge-${runId}-${t.key}">대기</span>
+    </div>
+  `).join("");
+}
+
+function markTaskRunning(runId, taskKey) {
+  if (!taskKey) return;
+  const badge = document.getElementById(`task-badge-${runId}-${taskKey}`);
+  if (badge) {
+    badge.className = "badge badge-accent";
+    badge.textContent = "진행중";
+  }
+}
+
+function markTaskCompleted(runId, taskKey) {
+  if (!taskKey) return;
+  const badge = document.getElementById(`task-badge-${runId}-${taskKey}`);
+  if (badge) {
+    badge.className = "badge status-completed";
+    badge.textContent = "완료";
+  }
+}
+
+async function approvePlanInTurn(runId) {
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/plan/approve`, {
+      method: "POST"
+    });
+    if (res.ok) {
+      const gate = document.getElementById(`gate-${runId}`);
+      if (gate) gate.classList.add("hidden");
+      updateTurnStatus(runId, "계획 승인됨 (실행 중)", true);
+    } else {
+      alert("계획 승인에 실패했습니다.");
+    }
+  } catch (err) {
+    console.error("Approval error:", err);
+  }
+}
+
+async function loadDiffsInTurn(runId) {
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/artifacts`);
+    if (res.ok) {
+      const data = await res.json();
+      const sec = document.getElementById(`sec-diff-${runId}`);
+      const content = document.getElementById(`diff-content-${runId}`);
+      if (!sec || !content) return;
+      if (data.items && data.items.length > 0) {
+        sec.classList.remove("hidden");
+        content.textContent = data.items.map((a) => `[생성된 파일 diff] ${a.artifactType} (${a.storageKey}) — ${a.byteSize} bytes`).join("\n");
+      }
+    }
+  } catch (err) {
+    console.warn("Load diffs error:", err);
+  }
+}
+
+function scrollChatToBottom() {
+  const area = document.getElementById("chat-scroll-area");
+  if (area) {
+    area.scrollTop = area.scrollHeight;
+  }
+}
+
+// ==========================================================================
+// View Run in Direct Chat
+// ==========================================================================
+
+async function viewSession(sessionId) {
+  activeSessionId = sessionId;
+  try {
+    localStorage.setItem("gon.active_session_id", sessionId);
+  } catch {}
+
+  switchTab("chat");
+
+  const chatView = document.getElementById("view-chat");
+  if (chatView) chatView.classList.remove("empty-mode");
+
+  let session = cachedSessions.find((s) => s.id === sessionId);
+  if (!session) {
+    try {
+      const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
+      if (res.ok) {
+        const data = await res.json();
+        const sessions = groupRunsIntoSessions(data.items || []);
+        cachedSessions = sessions;
+        session = sessions.find((s) => s.id === sessionId);
+      }
+    } catch (e) {
+      console.warn("Fetch session error:", e);
+    }
+  }
+
+  renderSidebarSessions(cachedSessions);
+
+  if (!session || !session.runs || session.runs.length === 0) {
+    return;
+  }
+
+  const thread = document.getElementById("chat-thread");
+  if (!thread) return;
+
+  // Clear existing thread to render this session's full conversation history
+  thread.innerHTML = "";
+
+  for (const run of session.runs) {
+    await renderTurnInThread(thread, run);
+  }
+
+  // Set activeRunId to the latest run in the session
+  const lastRun = session.runs[session.runs.length - 1];
+  activeRunId = lastRun.id;
+  try {
+    localStorage.setItem("gon.active_run_id", lastRun.id);
+  } catch {}
+
+  if (lastRun.status === "running" || lastRun.status === "queued" || lastRun.status === "planning" || lastRun.status === "refining") {
+    connectRunSSE(lastRun.id);
+  }
+
+  resizeCobwebCanvas();
+  scrollChatToBottom();
+}
+
+async function renderTurnInThread(thread, run) {
+  const reqText = run.rawRequest || `대화 #${run.id.slice(0, 8)}`;
+  const attachments = run.runContext?.attachments || [];
+
+  const userRow = document.createElement("div");
+  userRow.className = "user-message-row";
+
+  let attachmentsHtml = "";
+  if (attachments && attachments.length > 0) {
+    attachmentsHtml = `<div class="user-attachments-grid">` +
+      attachments.map((f) => {
+        if (f.isImage || (f.type && f.type.startsWith("image/"))) {
+          return `<img src="${f.dataUrl}" alt="${escapeHtml(f.name)}" class="user-attachment-img" />`;
+        }
+        return `
+          <div class="user-attachment-card">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span>${escapeHtml(f.name)} (${formatBytes(f.size || 0)})</span>
+          </div>
+        `;
+      }).join("") + `</div>`;
+  }
+
+  const textHtml = reqText ? `<div>${escapeHtml(reqText)}</div>` : "";
+  userRow.innerHTML = `<div class="user-bubble">${attachmentsHtml}${textHtml}</div>`;
+  thread.appendChild(userRow);
+
+  const isChat = run.executionMode === "chat" || isLikelyChat(reqText);
+  const assistantTurn = document.createElement("div");
+  assistantTurn.className = "assistant-turn";
+  assistantTurn.id = `turn-${run.id}`;
+  assistantTurn.innerHTML = `
+    <div class="assistant-row">
+      <img src="/logo.webp" alt="Gon" class="assistant-avatar" width="24" height="24">
+      <div class="assistant-main">
+        <div class="work-process-wrap ${isChat ? 'hidden' : ''}" id="process-wrap-${run.id}">
+          <button type="button" class="work-process-toggle-btn" onclick="toggleWorkProcess('${run.id}')">
+            <span class="working-dot" id="dot-${run.id}"></span>
+            <span class="work-process-title" id="process-status-text-${run.id}">기록된 작업 내역</span>
+            <svg class="chevron-icon open" id="arrow-${run.id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <div class="work-process-drawer" id="drawer-${run.id}">
+            <div class="work-process-inner">
+              <div class="process-sub-item hidden" id="sec-req-${run.id}">
+                <div class="process-sub-label">요구사항 구체화</div>
+                <div class="req-content-box" id="req-content-${run.id}">기록을 불러오는 중...</div>
+              </div>
+              <div class="process-sub-item hidden" id="sec-tasks-${run.id}">
+                <div class="process-sub-label">실행 계획 DAG</div>
+                <div class="tasks-flow-box" id="tasks-content-${run.id}">기록을 불러오는 중...</div>
+              </div>
+              <div class="process-sub-item">
+                <div class="process-sub-label">실행 스트림 로그</div>
+                <div class="terminal-box" id="term-${run.id}">이벤트 대기 중...</div>
+              </div>
+              <div class="process-sub-item hidden" id="sec-diff-${run.id}">
+                <div class="process-sub-label">생성된 파일 Diff</div>
+                <div class="diff-box-inner" id="diff-content-${run.id}">산출물 불러오는 중...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="report-viewer" id="response-${run.id}">
+          ${run.status === "completed" ? "답변을 불러오는 중입니다..." : "처리 중입니다..."}
+        </div>
+      </div>
+    </div>
+  `;
+  thread.appendChild(assistantTurn);
+
+  // Restore details and response from events
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${run.id}/event-list`);
+    if (res.ok) {
+      const data = await res.json();
+      const events = data.items || [];
+      let finalOutput = "";
+      for (const ev of events) {
+        if (ev.eventType === "chat:response" && ev.payload?.text) {
+          finalOutput = ev.payload.text;
+        } else if (ev.eventType === "run:completed" && ev.payload?.output) {
+          finalOutput = ev.payload.output;
+        } else if (ev.eventType === "requirements:refined" && ev.payload?.requirements) {
+          renderRequirementsInTurn(run.id, ev.payload.requirements);
+        } else if (ev.eventType === "plan:created" && ev.payload?.tasks) {
+          renderTasksFlowInTurn(run.id, ev.payload.tasks);
+        } else if (ev.eventType === "run:failed") {
+          finalOutput = "작업 중 오류 발생: " + (ev.payload?.error || "실패");
+        }
+        appendLogToTurn(run.id, ev.eventType, typeof ev.payload === "string" ? ev.payload : JSON.stringify(ev.payload));
+      }
+      if (finalOutput) {
+        setResponseText(run.id, finalOutput);
+        if (isChat) {
+          const wrap = document.getElementById(`process-wrap-${run.id}`);
+          if (wrap) wrap.classList.add("hidden");
+        }
+      } else if (run.status === "completed") {
+        setResponseText(run.id, "작업이 성공적으로 완료되었습니다.");
+      }
+    }
+  } catch (err) {
+    console.warn("Event list restore error:", err);
+  }
+
+  await loadDiffsInTurn(run.id);
+}
+
+async function viewRun(runId) {
+  const session = cachedSessions.find((s) => s.runs && s.runs.some((r) => r.id === runId));
+  if (session) {
+    await viewSession(session.id);
+  } else {
+    await viewSession(runId);
+  }
+}
+
+// ==========================================================================
+// BYOK Key Registration (W10)
+// ==========================================================================
+
+async function registerApiKey() {
+  const provider = document.getElementById("byok-provider").value;
+  const key = document.getElementById("byok-key").value.trim();
+  if (!key) {
+    alert("API Key를 입력하세요.");
+    return;
+  }
+  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/api-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, apiKey: key })
+  });
+  if (res.ok) {
+    alert("암호화되어 안전하게 등록되었습니다.");
+    document.getElementById("byok-key").value = "";
+    loadConnections();
+  }
+}
+
+async function checkConnectionHealth(connectionId) {
+  if (!currentWorkspaceId) return;
+  try {
+    const btn = document.getElementById(`health-btn-${connectionId}`);
+    if (btn) btn.textContent = "점검 중...";
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${connectionId}/health-check`, {
+      method: "POST"
+    });
+    if (res.ok) {
+      await loadConnections();
+    }
+  } catch (err) {
+    console.error("Health check error:", err);
+  }
+}
+
+async function loadConnections() {
+  if (!currentWorkspaceId) return;
+  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections`);
+  if (res.ok) {
+    const data = await res.json();
+    const grid = document.getElementById("connections-list");
+    if (!grid) return;
+    if (data.items.length === 0) {
+      grid.innerHTML = `<p class="text-faint">등록된 AI 구독 또는 API Key가 없습니다.</p>`;
+      return;
+    }
+    grid.innerHTML = data.items.map((c) => {
+      const isSub = c.mode === "LOCAL_NATIVE_CLI";
+      const isConnected = c.status === "connected";
+      const badgeClass = isConnected ? "badge-success" : (c.status === "needs_action" ? "badge-warning" : "badge-accent");
+      const statusLabel = isConnected ? "연결됨 (정상)" : (c.status === "needs_action" ? "조치 필요 (한도/로그인)" : c.status);
+      const subBadge = isSub ? `<span class="badge" style="background:#eef2ff;color:#4f46e5;font-weight:600;margin-left:6px;">개인 구독 (Local Native CLI)</span>` : "";
+
+      return `
+        <div class="content-card" style="margin-bottom:12px;border:1px solid var(--border-subtle, #e5e7eb);border-radius:10px;padding:16px;">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong style="font-size:15px;">${escapeHtml(c.displayName)}</strong>
+              ${subBadge}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="badge ${badgeClass}" style="padding:4px 8px;border-radius:6px;font-size:12px;">${statusLabel}</span>
+              <button id="health-btn-${c.id}" class="btn btn-sm" onclick="checkConnectionHealth('${c.id}')" style="font-size:12px;padding:4px 10px;cursor:pointer;">상태 점검</button>
+            </div>
+          </div>
+          <div class="text-sub text-sm mt-2" style="color:var(--text-muted, #6b7280);line-height:1.5;">
+            ${c.details ? `<div><strong>상세:</strong> ${escapeHtml(c.details)}</div>` : ""}
+            <div><strong>과금:</strong> ${isSub ? "사용자 AI 구독 계정 직접 활용 ($0 추가 과금 없음)" : "BYOK API Key 직접 과금"}</div>
+            <div><strong>지원 기능:</strong> ${c.capabilities ? c.capabilities.join(", ") : "plan, code, chat"}</div>
+            ${c.lastHealthCheckAt ? `<div style="font-size:11px;color:#9ca3af;margin-top:4px;">최근 점검: ${new Date(c.lastHealthCheckAt).toLocaleTimeString()}</div>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+}
+
+// ==========================================================================
+// Runner Device Pairing (W02)
+// ==========================================================================
+
+async function issuePairingCode() {
+  if (!currentWorkspaceId) return;
+  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
+    method: "POST"
+  });
+  if (res.ok) {
+    const data = await res.json();
+    document.getElementById("pairing-code-value").textContent = data.pairingCode;
+    document.getElementById("pairing-command-text").textContent = `aso-runner pair ${data.pairingCode}`;
+    document.getElementById("pairing-code-display").classList.remove("hidden");
+  }
+}
+
+function copyPairingCommand() {
+  const text = document.getElementById("pairing-command-text").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert("명령어가 클립보드에 복사되었습니다: " + text);
+  });
+}
+
+async function loadRunners() {
+  if (!currentWorkspaceId) return;
+  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
+  if (res.ok) {
+    const data = await res.json();
+    const list = document.getElementById("runners-list");
+    if (!list) return;
+    if (data.items.length === 0) {
+      list.innerHTML = `<p class="text-faint">등록된 기기가 없습니다.</p>`;
+      return;
+    }
+    list.innerHTML = data.items.map((r) => {
+      const allowed = r.allowedPaths || [];
+      const active = r.activePath || (allowed.length > 0 ? allowed[0] : "");
+      return `
+        <div class="content-card" style="margin-bottom:16px;">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong style="font-size:15px;">${escapeHtml(r.name)}</strong>
+              <span class="badge ${r.status === "online" ? "badge-accent" : "badge-sub"}" style="margin-left:8px;">${r.status}</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn btn-sm btn-ghost" onclick="openWorkspaceFolderModal()" style="font-size:12px;">작업 공간 관리</button>
+              <button class="btn btn-sm btn-ghost text-danger" onclick="deleteRunnerDevice('${escapeHtml(r.id)}', '${escapeHtml(r.name)}')" style="font-size:12px;color:rgb(var(--c-danger));">기기 등록 해제</button>
+            </div>
+          </div>
+          <div class="text-faint text-sm mt-2">기기 ID: <code>${escapeHtml(r.id)}</code> · 마지막 통신: ${escapeHtml(r.lastSeenAt || "방금 전")}</div>
+
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgb(var(--c-line));">
+            <span style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">허가된 데스크탑 작업 공간:</span>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${allowed.map(p => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(var(--c-sunken),0.5);border-radius:6px;font-family:monospace;font-size:12px;">
+                  <span>${escapeHtml(p)}</span>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    ${p === active ? '<span class="badge badge-accent" style="font-size:11px;">현재 활성</span>' : `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;" onclick="selectWorkspacePath('${escapeHtml(p)}')">선택</button>`}
+                    <button class="btn btn-ghost btn-sm text-danger" style="font-size:11px;padding:2px 6px;color:rgb(var(--c-danger));" onclick="removeWorkspacePath('${escapeHtml(p)}')" title="이 폴더 권한 제거">✕</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+}
+
+// ==========================================================================
+// Usage Ledger (W12)
+// ==========================================================================
+
+async function loadUsage() {
+  if (!currentWorkspaceId) return;
+  const url = activeRunId
+    ? `${API_URL}/workspaces/${currentWorkspaceId}/runs/${activeRunId}/usage`
+    : `${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`;
+
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const tbody = document.getElementById("usage-body");
+      if (!tbody) return;
+
+      if (activeRunId && data.items) {
+        if (data.items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" class="table-empty">기록된 사용량이 없습니다.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = data.items.map((u) => `
+          <tr>
+            <td><code>${u.runId.slice(0, 8)}</code></td>
+            <td>${escapeHtml(u.provider)} (${escapeHtml(u.model || "default")})</td>
+            <td>${u.inputTokens.toLocaleString()}</td>
+            <td>${u.outputTokens.toLocaleString()}</td>
+            <td>${u.cachedInputTokens.toLocaleString()}</td>
+            <td>${u.durationMs}ms</td>
+            <td class="text-accent font-semibold">${u.measuredCostUsd !== null ? `$${u.measuredCostUsd.toFixed(4)}` : "—"}</td>
+            <td><span class="badge badge-accent">${escapeHtml(u.costConfidence)}</span></td>
+          </tr>
+        `).join("");
+      }
+    }
+  } catch (err) {
+    console.warn("Load usage error:", err);
+  }
+}
+
+// ==========================================================================
+// Utilities
+// ==========================================================================
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+window.addEventListener("DOMContentLoaded", init);

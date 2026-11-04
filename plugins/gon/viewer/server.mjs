@@ -9,6 +9,7 @@ import { RUN_ID_RE, SAFE_OUT_RE, parseEvents, buildRun, runStatus } from './even
 const VIEWER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_EVENTS_BYTES = 4 * 1024 * 1024;
+const MAX_REPORT_BYTES = 256 * 1024;
 const READ_CHUNK_BYTES = 64 * 1024;
 const MAX_SSE_CLIENTS = 8;
 
@@ -181,6 +182,54 @@ function validateSafeMdPath(runDir, rawQuery) {
   }
 }
 
+function sanitizeReport(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  try {
+    const out = {
+      v: typeof obj.v === 'number' ? obj.v : 1,
+      run: typeof obj.run === 'string' ? obj.run.slice(0, 100) : '',
+      mode: typeof obj.mode === 'string' ? obj.mode.slice(0, 50) : 'standard',
+      status: typeof obj.status === 'string' ? obj.status.slice(0, 50) : 'done',
+      startedAt: typeof obj.startedAt === 'string' ? obj.startedAt.slice(0, 50) : '',
+      endedAt: typeof obj.endedAt === 'string' ? obj.endedAt.slice(0, 50) : null,
+      elapsedMs: typeof obj.elapsedMs === 'number' ? obj.elapsedMs : null,
+      nodes: Array.isArray(obj.nodes)
+        ? obj.nodes.slice(0, 100).map((n) => ({
+            id: typeof n?.id === 'string' ? n.id.slice(0, 64) : '',
+            stage: typeof n?.stage === 'string' ? n.stage.slice(0, 32) : '',
+            status: typeof n?.status === 'string' ? n.status.slice(0, 32) : '',
+            durationMs: typeof n?.durationMs === 'number' ? n.durationMs : null,
+          }))
+        : [],
+      usage:
+        obj.usage && typeof obj.usage === 'object'
+          ? {
+              source: typeof obj.usage.source === 'string' ? obj.usage.source.slice(0, 64) : 'unknown',
+              input: typeof obj.usage.input === 'number' ? obj.usage.input : null,
+              cacheWrite: typeof obj.usage.cacheWrite === 'number' ? obj.usage.cacheWrite : null,
+              cacheRead: typeof obj.usage.cacheRead === 'number' ? obj.usage.cacheRead : null,
+              output: typeof obj.usage.output === 'number' ? obj.usage.output : null,
+              messages: typeof obj.usage.messages === 'number' ? obj.usage.messages : null,
+              cacheReadRatio: typeof obj.usage.cacheReadRatio === 'number' ? obj.usage.cacheReadRatio : null,
+              files: typeof obj.usage.files === 'number' ? obj.usage.files : null,
+            }
+          : { source: 'unknown', input: null, cacheWrite: null, cacheRead: null, output: null, messages: null, cacheReadRatio: null, files: null },
+      cost:
+        obj.cost && typeof obj.cost === 'object'
+          ? {
+              estimatedUsd: typeof obj.cost.estimatedUsd === 'number' ? obj.cost.estimatedUsd : null,
+              source: typeof obj.cost.source === 'string' ? obj.cost.source.slice(0, 64) : 'unknown',
+              note: typeof obj.cost.note === 'string' ? obj.cost.note.slice(0, 200) : '',
+            }
+          : { estimatedUsd: null, source: 'unknown', note: '' },
+      generatedAt: typeof obj.generatedAt === 'string' ? obj.generatedAt.slice(0, 50) : '',
+    };
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export async function startServer(opts = {}) {
   const gonDir = path.resolve(String(opts.gonDir ?? '.gon'));
   const requestedPort = opts.port !== undefined ? Number(opts.port) : 0;
@@ -310,6 +359,7 @@ export async function startServer(opts = {}) {
             req: run.req,
             tool: run.tool,
             depth: run.depth,
+            mode: run.mode,
             status: runStatus(run),
             startedAt: run.startedAt,
             endedAt: run.endedAt,
@@ -371,10 +421,26 @@ export async function startServer(opts = {}) {
         }
         const { events, skipped } = parseEvents(read.buf.toString('utf8'));
         const run = buildRun(runId, events);
+
+        let report = null;
+        try {
+          const reportPath = path.join(gonDir, runId, 'report.json');
+          if (fs.existsSync(reportPath) && !isLinkOrJunction(reportPath)) {
+            const reportRead = readBoundedFile(reportPath, MAX_REPORT_BYTES);
+            if (reportRead.status === 200) {
+              const parsed = JSON.parse(reportRead.buf.toString('utf8'));
+              report = sanitizeReport(parsed);
+            }
+          }
+        } catch {
+          report = null;
+        }
+
         sendJson(res, 200, {
           run,
           status: runStatus(run),
           skipped,
+          report,
         });
         return;
       }

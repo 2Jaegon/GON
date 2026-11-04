@@ -1,0 +1,30 @@
+{
+  "name": "@aso/local-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "aso-runner": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "start": "node dist/cli.js start"
+  },
+  "dependencies": {
+    "@aso/contracts": "*",
+    "@aso/execution-protocol": "*",
+    "@aso/security": "*",
+    "commander": "^13.1.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.9",
+    "@types/ws": "^8.5.14"
+  }
+}
+

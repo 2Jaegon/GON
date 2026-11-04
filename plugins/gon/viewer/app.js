@@ -12,6 +12,18 @@ const STAGE_LABELS = {
   compose: '작업 구성',
   execute: '전문가 실행',
   lead: '결과 종합',
+  refine: '요구 구체화',
+  route: '스킬 선별',
+  approve: '계획 승인',
+  verify: '독립 검증',
+};
+
+const MODE_LABELS = {
+  fast: 'FAST',
+  standard: 'STANDARD',
+  deep: 'DEEP',
+  quick: 'FAST',
+  normal: 'STANDARD',
 };
 
 const STATUS_LABELS = {
@@ -277,6 +289,14 @@ function initViewerApp() {
       fbBadge.textContent = '대체 카드 사용 (fallback)';
       detailFlags.appendChild(fbBadge);
     }
+    if (Array.isArray(node.skills) && node.skills.length > 0) {
+      for (const sk of node.skills) {
+        const skBadge = document.createElement('span');
+        skBadge.setAttribute('class', 'badge badge-loading');
+        skBadge.textContent = `스킬: ${sk}`;
+        detailFlags.appendChild(skBadge);
+      }
+    }
     if (node.via === 'inline') {
       const viaBadge = document.createElement('span');
       viaBadge.setAttribute('class', 'badge badge-skipped');
@@ -451,9 +471,15 @@ function initViewerApp() {
       const chip = document.createElement('div');
       chip.setAttribute('class', 'run-chip');
 
-      const badge = document.createElement('span');
-      setBadge(badge, s.status);
-      chip.appendChild(badge);
+      const modeBadge = document.createElement('span');
+      const modeKey = s.mode || s.depth || 'standard';
+      modeBadge.setAttribute('class', `badge badge-${s.status}`);
+      modeBadge.textContent = MODE_LABELS[modeKey] || modeKey.toUpperCase();
+      chip.appendChild(modeBadge);
+
+      const statusBadge = document.createElement('span');
+      setBadge(statusBadge, s.status);
+      chip.appendChild(statusBadge);
 
       const reqSpan = document.createElement('span');
       reqSpan.setAttribute('class', 'run-chip-req');

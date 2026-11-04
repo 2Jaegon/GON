@@ -2,9 +2,16 @@ export const RUN_ID_RE = /^\d{8}-\d{4}-[0-9a-f]{4}$/;
 export const NODE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 // The one rule for a node's `out` file name: a flat .md file inside the run folder.
 export const SAFE_OUT_RE = /^[\w가-힣 ._-]+\.md$/;
+
+// v1 compatibility
 export const DEPTHS = ['quick', 'normal', 'deep'];
 export const STAGES = ['grill', 'plan', 'check', 'compose', 'execute', 'lead'];
 
+// v2 specifications
+export const MODES = ['fast', 'standard', 'deep'];
+export const STAGES_V2 = ['refine', 'plan', 'route', 'approve', 'execute', 'verify'];
+
+const ALL_VALID_STAGES = Array.from(new Set([...STAGES, ...STAGES_V2]));
 const NODE_STATUSES = ['running', 'done', 'failed', 'skipped'];
 const END_STATUSES = ['done', 'failed'];
 const VIAS = ['subagent', 'inline'];
@@ -12,7 +19,7 @@ const STALL_MS = 10 * 60 * 1000;
 const MAX_FROM = 32;
 const ISO_TS_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
-// ISO-8601 shape, a real calendar date/time (Date.parse alone accepts 2026-02-30 and T24:00), valid offset.
+// ISO-8601 shape, a real calendar date/time, valid offset.
 function isIsoTimestamp(t) {
   if (typeof t !== 'string') return false;
   const m = ISO_TS_RE.exec(t);
@@ -32,7 +39,6 @@ function cleanFrom(from) {
   return Array.isArray(from) ? from.filter(isNodeRef).slice(0, MAX_FROM) : [];
 }
 
-// Formats an untrusted value for an error message without String() recursion.
 function show(v) {
   if (typeof v === 'string') return JSON.stringify(v.slice(0, 80));
   if (typeof v === 'number' || typeof v === 'boolean' || v === null || v === undefined) return String(v);
@@ -68,8 +74,10 @@ export function parseEvents(text) {
 export function buildRun(runId, events) {
   const run = {
     id: String(runId ?? ''),
+    v: 1,
     req: '',
     tool: '',
+    mode: 'standard',
     depth: 'normal',
     startedAt: '',
     endedAt: null,
@@ -88,9 +96,24 @@ export function buildRun(runId, events) {
     const t = typeof ev.t === 'string' ? ev.t : '';
 
     if (ev.ev === 'run.start') {
+      if (typeof ev.v === 'number') run.v = ev.v;
       if (typeof ev.req === 'string') run.req = ev.req;
       if (typeof ev.tool === 'string') run.tool = ev.tool;
-      if (typeof ev.depth === 'string') run.depth = ev.depth;
+      if (typeof ev.depth === 'string') {
+        run.depth = ev.depth;
+        if (ev.depth === 'quick') run.mode = 'fast';
+        else if (ev.depth === 'normal') run.mode = 'standard';
+        else if (ev.depth === 'deep') run.mode = 'deep';
+      }
+      if (typeof ev.mode === 'string' && MODES.includes(ev.mode)) {
+        run.mode = ev.mode;
+        if (ev.mode === 'fast') run.depth = 'quick';
+        else if (ev.mode === 'standard') run.depth = 'normal';
+        else if (ev.mode === 'deep') run.depth = 'deep';
+      }
+      if (typeof ev.mode_reason === 'string') {
+        run.mode_reason = ev.mode_reason;
+      }
       if (t) run.startedAt = t;
       continue;
     }
@@ -132,6 +155,9 @@ export function buildRun(runId, events) {
       if (Array.isArray(ev.files)) {
         node.files = ev.files.filter((f) => typeof f === 'string');
       }
+      if (Array.isArray(ev.skills)) {
+        node.skills = ev.skills.filter((s) => typeof s === 'string');
+      }
 
       if (node.status === 'done' || node.status === 'failed' || node.status === 'skipped') {
         if (t) node.endedAt = t;
@@ -163,6 +189,7 @@ export function validateRun(events, opts = {}) {
   const nodeParents = new Map();
   let seenStart = false;
   let seenEnd = false;
+  let runVersion = 1;
 
   for (let i = 0; i < events.length; i += 1) {
     const ev = events[i];
@@ -180,9 +207,12 @@ export function validateRun(events, opts = {}) {
         errors.push(`event[${i}]: run.start must appear only at index 0`);
       }
       seenStart = true;
-      if (ev.v !== 1) {
-        errors.push(`event[${i}]: run.start requires v === 1`);
+      if (ev.v !== 1 && ev.v !== 2) {
+        errors.push(`event[${i}]: run.start requires v === 1 or v === 2`);
+      } else {
+        runVersion = ev.v;
       }
+
       if (typeof ev.run !== 'string' || !RUN_ID_RE.test(ev.run)) {
         errors.push(`event[${i}]: invalid run id ${show(ev.run)}`);
       } else if (opts?.runId !== undefined && ev.run !== opts.runId) {
@@ -194,8 +224,19 @@ export function validateRun(events, opts = {}) {
       if (typeof ev.tool !== 'string' || ev.tool.trim().length === 0) {
         errors.push(`event[${i}]: tool must be a non-empty string`);
       }
-      if (!DEPTHS.includes(ev.depth)) {
-        errors.push(`event[${i}]: depth ${show(ev.depth)} must be one of ${DEPTHS.join(', ')}`);
+
+      if (runVersion === 1) {
+        if (!DEPTHS.includes(ev.depth)) {
+          errors.push(`event[${i}]: depth ${show(ev.depth)} must be one of ${DEPTHS.join(', ')}`);
+        }
+      } else {
+        // v2
+        if (!MODES.includes(ev.mode)) {
+          errors.push(`event[${i}]: mode ${show(ev.mode)} must be one of ${MODES.join(', ')}`);
+        }
+        if (ev.mode_reason !== undefined && (typeof ev.mode_reason !== 'string' || ev.mode_reason.length > 500)) {
+          errors.push(`event[${i}]: mode_reason must be string <= 500 chars`);
+        }
       }
     } else if (ev.ev === 'node') {
       if (!seenStart) {
@@ -222,12 +263,12 @@ export function validateRun(events, opts = {}) {
         if (!Array.isArray(ev.from) || ev.from.length === 0) {
           errors.push(`event[${i}]: first event for node "${ev.id}" must have non-empty from[]`);
         }
-        if (!STAGES.includes(ev.stage)) {
+        if (!ALL_VALID_STAGES.includes(ev.stage)) {
           errors.push(`event[${i}]: first event for node "${ev.id}" must have valid stage`);
         }
       }
 
-      if (ev.stage !== undefined && !STAGES.includes(ev.stage)) {
+      if (ev.stage !== undefined && !ALL_VALID_STAGES.includes(ev.stage)) {
         errors.push(`event[${i}]: invalid stage ${show(ev.stage)}`);
       }
 
@@ -255,6 +296,11 @@ export function validateRun(events, opts = {}) {
       if (ev.files !== undefined) {
         if (!Array.isArray(ev.files) || !ev.files.every((f) => typeof f === 'string' && f.length > 0)) {
           errors.push(`event[${i}]: files must be string[]`);
+        }
+      }
+      if (ev.skills !== undefined) {
+        if (!Array.isArray(ev.skills) || !ev.skills.every((s) => typeof s === 'string' && s.length > 0)) {
+          errors.push(`event[${i}]: skills must be string[]`);
         }
       }
       if (ev.sum !== undefined) {
@@ -295,8 +341,7 @@ export function validateRun(events, opts = {}) {
     }
   }
 
-  // Iterative DFS (explicit stack): a long chain must not overflow the call stack.
-  // state: 1 = on the current path, 2 = fully explored.
+  // Iterative DFS cycle check
   const state = new Map();
   function hasCycle(startId) {
     if (state.get(startId) === 2) return false;

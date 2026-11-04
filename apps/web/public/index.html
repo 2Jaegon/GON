@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gon ASO — Adaptive Skill Orchestrator</title>
+  <!-- Pretendard Web Font -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Floating Sidebar Open Button (Appears when sidebar is collapsed) -->
+  <button class="floating-sidebar-toggle" id="floating-sidebar-toggle" onclick="toggleSidebarCollapse()" title="사이드바 열기" aria-label="사이드바 열기">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+      <line x1="9" y1="3" x2="9" y2="21"></line>
+    </svg>
+  </button>
+
+  <div class="app-layout" id="app-layout">
+    <!-- Sidebar (Matches Claude.ai layout with fixed-corner collapse button) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-header-left">
+          <button class="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="사이드바 접기" aria-label="사이드바 접기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+            </svg>
+          </button>
+          <div class="brand">
+            <img src="/brand-logo.png" alt="Gon Logo" class="brand-logo" width="22" height="22" />
+            <span class="brand-title">Gon</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Chat Button (Pill matching Claude UI) -->
+      <div class="sidebar-action-row">
+        <button class="new-chat-main-btn" onclick="startNewConversation()" title="새로 만들기">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>새로 만들기</span>
+        </button>
+      </div>
+
+      <!-- Quick Search Action -->
+      <div class="sidebar-search-row">
+        <button class="sidebar-search-btn" onclick="focusSearchInput()" title="검색">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span>검색</span>
+        </button>
+      </div>
+
+      <!-- Navigation & History Menu -->
+      <nav class="nav-menu" aria-label="메뉴 탐색">
+        <button class="nav-item" data-tab="projects" onclick="switchNavTab('projects')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>프로젝트</span>
+        </button>
+
+        <button class="nav-item" data-tab="artifacts" onclick="switchNavTab('artifacts')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          <span>아티팩트</span>
+        </button>
+
+        <button class="nav-item" data-tab="scheduled" onclick="switchNavTab('scheduled')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>예약됨</span>
+        </button>
+
+        <button class="nav-item" data-tab="skills">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>스킬 카탈로그</span>
+        </button>
+
+        <button class="nav-item" data-tab="connections" onclick="switchNavTab('connections')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <span>AI 구독 및 연결</span>
+        </button>
+
+        <button class="nav-item" data-tab="runner" onclick="switchNavTab('runner')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <span>로컬 러너</span>
+        </button>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- Recent Runs / Conversation History (Positioned directly above profile) -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title" onclick="toggleSidebarRuns()">최근 항목</span>
+            <div class="sidebar-section-meta">
+              <span class="sidebar-section-count" id="sidebar-runs-count">0</span>
+              <svg class="sidebar-toggle-chevron open" id="sidebar-runs-chevron" onclick="toggleSidebarRuns()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+          </div>
+          <div class="sidebar-runs-container" id="sidebar-runs-container">
+            <div class="sidebar-runs-list" id="sidebar-runs-list">
+              <div class="sidebar-runs-empty">최근 항목이 없습니다</div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Sidebar Bottom: Settings & User Profile with Toggle Dropdown -->
+      <div class="sidebar-footer">
+        <div class="user-profile-menu-container" id="user-profile-menu-container">
+          <!-- Profile Toggle Popover Menu (Appears on click above user chip) -->
+          <div class="profile-dropdown-menu hidden" id="profile-dropdown-menu" role="menu" aria-label="사용자 프로필 메뉴">
+            <div class="profile-dropdown-header">
+              <div class="user-avatar-sm" id="profile-menu-avatar">이</div>
+              <div class="profile-dropdown-meta">
+                <span class="profile-dropdown-name" id="profile-menu-name">이재곤</span>
+                <span class="profile-dropdown-plan">Pro 플랜</span>
+              </div>
+            </div>
+
+            <div class="profile-dropdown-divider"></div>
+
+            <!-- 1. Settings Selection -->
+            <button type="button" class="profile-dropdown-item" onclick="openSettingsFromProfile()" role="menuitem">
+              <svg class="dropdown-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>설정</span>
+            </button>
+
+            <!-- 2. Usage Ledger Selection -->
+            <button type="button" class="profile-dropdown-item" onclick="openUsageFromProfile()" role="menuitem">
+              <svg class="dropdown-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+              <span>사용량 확인</span>
+            </button>
+
+            <div class="profile-dropdown-divider"></div>
+
+            <!-- 3. BYOK Connection Selection -->
+            <button type="button" class="profile-dropdown-item" onclick="openConnectionsFromProfile()" role="menuitem">
+              <svg class="dropdown-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>모델 연결 (BYOK)</span>
+            </button>
+
+            <!-- 4. Runner Pairing Selection -->
+            <button type="button" class="profile-dropdown-item" onclick="openRunnerFromProfile()" role="menuitem">
+              <svg class="dropdown-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              <span>로컬 러너</span>
+            </button>
+          </div>
+
+          <!-- User Chip Button (Toggles profile menu) -->
+          <button type="button" class="user-chip" id="btn-user-profile" onclick="toggleProfileDropdown(event)" aria-haspopup="true" aria-expanded="false" title="프로필 및 설정 열기">
+            <div class="user-avatar" id="user-avatar">이</div>
+            <div class="user-meta">
+              <span class="user-email" id="user-display-name">이재곤 - Pro</span>
+            </div>
+            <svg class="user-chip-chevron" id="user-chip-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <main class="main-viewport">
+      <!-- 1. Direct Chat View (Claude & side_pj Direct Chat Design) -->
+      <section id="view-chat" class="chat-viewport view-panel active empty-mode">
+        
+        <!-- Live Real-Time Dot Cobweb Nexus Visualizer (Top Floor View) -->
+        <div class="dot-cobweb-container" id="dot-cobweb-container">
+          <div class="cobweb-top-bar" id="cobweb-top-bar">
+            <div class="cobweb-controls">
+              <button type="button" class="cobweb-btn" onclick="resetCobwebCamera()" title="시점 재정렬">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <span>초기화</span>
+              </button>
+            </div>
+          </div>
+          <!-- Canvas for real-time 60fps dynamic dot cobweb parallel tasks -->
+          <canvas id="dot-cobweb-canvas" class="dot-cobweb-canvas"></canvas>
+          <div id="cobweb-node-tooltip" class="cobweb-node-tooltip hidden"></div>
+        </div>
+
+        <!-- Chat Panel Container (Bottom Split View, Expandable to 100% Fullscreen) -->
+        <div class="chat-panel-container" id="chat-panel-container">
+          
+          <!-- Centered Empty State Greeting with Gon brand logo -->
+          <div class="chat-empty-container" id="chat-empty-container">
+            <div class="greeting-row">
+              <img src="/brand-logo.png" alt="Gon" class="greeting-brand-logo" width="38" height="38" />
+              <h1 class="greeting-title" id="greeting-title">이재곤님, 안녕하세요</h1>
+            </div>
+          </div>
+
+          <!-- Scrollable Conversation Thread (Active Mode Only) -->
+          <div class="chat-scroll-area" id="chat-scroll-area">
+            <div class="chat-thread" id="chat-thread">
+              <!-- Dynamically injected user messages and assistant blocks -->
+            </div>
+          </div>
+
+          <!-- Floating Composer (Centered in empty-mode, pinned at bottom in active-mode) -->
+          <div class="composer-container" id="composer-container">
+            <div class="composer-wrapper" id="composer-wrapper">
+              <!-- File / Image Attachments Preview Tray -->
+              <div class="composer-attachments-bar hidden" id="composer-attachments-bar"></div>
+
+              <textarea
+                id="run-request-input"
+                rows="1"
+                class="composer-textarea"
+                placeholder="Skills를 보려면 /를 입력하세요"
+              ></textarea>
+
+              <!-- Bottom Row Inside Composer: Left Controls + Right Tools & Model Picker -->
+              <div class="composer-bottom-row">
+                <div class="composer-bottom-left">
+                  <!-- File/Image Attach Button (+) -->
+                  <button type="button" class="composer-icon-btn" id="composer-attach-btn" onclick="triggerFilePicker()" title="파일 또는 이미지 첨부" aria-label="첨부">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                  </button>
+                  <input type="file" id="composer-file-input" style="display: none;" multiple accept="image/*,.txt,.md,.json,.ts,.js,.py,.pdf,.csv,.html,.css" onchange="handleFileSelected(event)" />
+
+                  <!-- Desktop Workspace Directory Selector Pill Button -->
+                  <button type="button" class="pill-select-wrapper workspace-pill-btn" id="composer-folder-btn" onclick="openWorkspaceFolderModal()" title="데스크탑 작업 폴더 변경" style="cursor:pointer;font-family:inherit;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity:0.85;flex-shrink:0;">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span id="composer-folder-btn-label" style="font-size:0.75rem;font-weight:600;color:rgb(var(--c-ink));max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">gon</span>
+                  </button>
+                  <input type="file" id="composer-folder-input" style="display: none;" webkitdirectory directory onchange="handleFolderPickerChange(event)" />
+
+                  <!-- Project Pill Dropdown -->
+                  <div class="pill-select-wrapper project-pill-wrapper">
+                    <select id="run-project-select" class="clean-pill-select" aria-label="프로젝트">
+                      <option value="">프로젝트 선택</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="composer-bottom-right">
+                  <!-- Voice & Audio Mic Icons (Claude UI Style) -->
+                  <button type="button" class="composer-icon-btn hidden-on-mobile" title="음성 입력" aria-label="마이크">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                      <line x1="12" y1="19" x2="12" y2="23"></line>
+                      <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                  </button>
+
+                  <button type="button" class="composer-icon-btn hidden-on-mobile" title="음성 모드" aria-label="음성 파형">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="4" y1="10" x2="4" y2="14"></line>
+                      <line x1="8" y1="6" x2="8" y2="18"></line>
+                      <line x1="12" y1="3" x2="12" y2="21"></line>
+                      <line x1="16" y1="7" x2="16" y2="17"></line>
+                      <line x1="20" y1="11" x2="20" y2="13"></line>
+                    </svg>
+                  </button>
+
+                  <!-- Model Picker Button (Model + Reasoning Effort, e.g. "Opus 3.5 중간") -->
+                  <div class="model-picker-container" id="model-picker-container">
+                    <button
+                      type="button"
+                      id="composer-model-picker-btn"
+                      class="clean-pill-select model-picker-btn"
+                      onclick="toggleModelPickerPopover(event)"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      title="모델 및 추론 강도 선택"
+                    >
+                      <span id="model-picker-display-label">Opus 3.5 중간</span>
+                      <svg class="model-picker-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
+
+                    <!-- Model Picker Popover (Matches side_pj & Claude Model Picker) -->
+                    <div id="model-picker-popover" class="model-picker-popover hidden" role="dialog" aria-label="모델 및 추론 강도 선택">
+                      <div class="popover-effort-row">
+                        <span class="popover-label">추론 강도</span>
+                        <div class="effort-segment-group">
+                          <button type="button" class="effort-btn" data-effort="low" onclick="selectModelEffort('low')">Low</button>
+                          <button type="button" class="effort-btn active" data-effort="medium" onclick="selectModelEffort('medium')">Mid</button>
+                          <button type="button" class="effort-btn" data-effort="high" onclick="selectModelEffort('high')">High</button>
+                        </div>
+                      </div>
+
+                      <div class="popover-divider"></div>
+
+                      <ul class="popover-model-list" id="popover-model-list">
+                        <li class="popover-model-item active" data-model-id="claude-3-7-sonnet" onclick="selectModelItem('claude-3-7-sonnet', 'Claude 3.7 Sonnet')">
+                          <div class="model-meta">
+                            <span class="model-name">Claude 3.7 Sonnet</span>
+                            <span class="model-desc">최신 플래그십, 하이브리드 확장 사고</span>
+                          </div>
+                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </li>
+                        <li class="popover-model-item" data-model-id="claude-3-5-opus" onclick="selectModelItem('claude-3-5-opus', 'Opus 3.5')">
+                          <div class="model-meta">
+                            <span class="model-name">Claude 3.5 Opus</span>
+                            <span class="model-desc">고난도 복합 추론 및 대규모 아키텍처</span>
+                          </div>
+                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </li>
+                        <li class="popover-model-item" data-model-id="claude-3-5-haiku" onclick="selectModelItem('claude-3-5-haiku', 'Claude 3.5 Haiku')">
+                          <div class="model-meta">
+                            <span class="model-name">Claude 3.5 Haiku</span>
+                            <span class="model-desc">초고속 레이턴시, 즉시 응답</span>
+                          </div>
+                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </li>
+                        <li class="popover-model-item" data-model-id="gemini-2-5-pro" onclick="selectModelItem('gemini-2-5-pro', 'Gemini 2.5 Pro')">
+                          <div class="model-meta">
+                            <span class="model-name">Gemini 2.5 Pro</span>
+                            <span class="model-desc">1M+ 대규모 컨텍스트 및 심층 분석</span>
+                          </div>
+                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </li>
+                        <li class="popover-model-item" data-model-id="gpt-4o" onclick="selectModelItem('gpt-4o', 'GPT-4o')">
+                          <div class="model-meta">
+                            <span class="model-name">GPT-4o</span>
+                            <span class="model-desc">OpenAI 옴니 모델 플래그십</span>
+                          </div>
+                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <!-- Execution Mode (Auto / Fast / Standard / Deep) -->
+                  <div class="pill-select-wrapper">
+                    <select id="run-mode-select" class="clean-pill-select" aria-label="실행 모드">
+                      <option value="auto">자동</option>
+                      <option value="fast">Fast</option>
+                      <option value="standard">Standard</option>
+                      <option value="deep">Deep</option>
+                    </select>
+                  </div>
+
+                  <!-- Chat Expand / Collapse Toggle Button (Matches side_pj Maximize2 / Minimize2) -->
+                  <button
+                    type="button"
+                    class="composer-icon-btn chat-expand-btn"
+                    id="btn-chat-expand"
+                    onclick="toggleChatExpand()"
+                    title="채팅창 접기 / 펼치기 [Esc]"
+                    aria-label="화면 크기 조절"
+                  >
+                    <!-- Maximize icon (shown when collapsed) -->
+                    <svg class="icon-maximize" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <polyline points="9 21 3 21 3 15"></polyline>
+                      <line x1="21" y1="3" x2="14" y2="10"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </svg>
+                    <!-- Minimize icon (shown when expanded) -->
+                    <svg class="icon-minimize hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="4 14 10 14 10 20"></polyline>
+                      <polyline points="20 10 14 10 14 4"></polyline>
+                      <line x1="14" y1="10" x2="21" y2="3"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </svg>
+                  </button>
+
+                  <!-- Send Button -->
+                  <button class="composer-send-btn" id="btn-submit-run" onclick="submitChatPrompt()" aria-label="보내기" title="보내기">
+                    <svg class="send-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <line x1="12" y1="19" x2="12" y2="5"></line>
+                      <polyline points="5 12 12 5 19 12"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Connections View (W10) -->
+      <section id="view-connections" class="sub-view-panel view-panel">
+        <div class="view-headline">
+          <div>
+            <h1 class="view-title">AI 모델 연결 (BYOK Vault)</h1>
+            <p class="view-desc">사용자 본인의 AI API Key를 암호화하여 저장하며, 비밀은 절대 화면이나 로그에 노출되지 않습니다.</p>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">새 API Key 등록</h2>
+            <span class="badge badge-accent">AES-256 Vault</span>
+          </div>
+
+          <div class="form-grid-2 mt-4">
+            <div class="field-item">
+              <label for="byok-provider" class="field-label">AI 제공사</label>
+              <select id="byok-provider" class="clean-select full-width">
+                <option value="openai">OpenAI (GPT-4o, o3-mini)</option>
+                <option value="anthropic">Anthropic (Claude 3.7 Sonnet)</option>
+                <option value="google">Google (Gemini 2.5 Flash / Pro)</option>
+              </select>
+            </div>
+            <div class="field-item">
+              <label for="byok-key" class="field-label">API Key</label>
+              <input type="password" id="byok-key" class="clean-input full-width" placeholder="sk-...">
+            </div>
+          </div>
+          <button class="btn btn-primary mt-4" onclick="registerApiKey()">암호화 등록</button>
+        </div>
+
+        <div class="content-card mt-5">
+          <div class="card-header">
+            <h2 class="card-title">등록된 커넥터 목록</h2>
+          </div>
+          <div id="connections-list" class="connector-grid mt-3">
+            <p class="text-faint">연결된 API Key가 없습니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Runner Pairing View (W02) -->
+      <section id="view-runner" class="sub-view-panel view-panel">
+        <div class="view-headline">
+          <div>
+            <h1 class="view-title">로컬 러너 기기 페어링</h1>
+            <p class="view-desc">로컬 컴퓨터에서 코드를 안전하게 실행할 수 있도록 기기를 페어링합니다.</p>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">1회용 페어링 코드 발급</h2>
+            <span class="text-faint text-sm">유효시간 10분</span>
+          </div>
+          <p class="text-sub mt-2">로컬 컴퓨터 터미널에서 ASO 러너를 실행하여 이 워크스페이스에 안전하게 기기를 등록하세요.</p>
+          <button class="btn btn-primary mt-4" onclick="issuePairingCode()">페어링 코드 생성</button>
+
+          <div id="pairing-code-display" class="pairing-box hidden mt-4">
+            <span class="pairing-code-title">발급된 페어링 코드</span>
+            <div class="pairing-code-badge" id="pairing-code-value">----</div>
+            <div class="pairing-command-row">
+              <code id="pairing-command-text">aso-runner pair CODE</code>
+              <button class="btn btn-ghost btn-sm" onclick="copyPairingCommand()">복사</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-card mt-5">
+          <div class="card-header">
+            <h2 class="card-title">등록된 러너 기기</h2>
+          </div>
+          <div id="runners-list" class="connector-grid mt-3">
+            <p class="text-faint">등록된 기기가 없습니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Skills View (W11) -->
+      <section id="view-skills" class="sub-view-panel view-panel">
+        <div class="view-headline">
+          <div>
+            <h1 class="view-title">스킬 카탈로그</h1>
+            <p class="view-desc">작업 난이도와 역량 요구에 따라 상위 오케스트레이터가 동적으로 조율하는 스킬 목록입니다.</p>
+          </div>
+        </div>
+
+        <div class="skills-grid">
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">ponytail</span>
+              <span class="badge badge-accent">Core 항시 적용</span>
+            </div>
+            <p class="skill-desc">YAGNI 원칙, Node.js 내장 모듈 우선, 최소 diff 및 변경 범위 통제 원칙을 적용합니다.</p>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">andrej-karpathy-skills</span>
+              <span class="badge badge-accent">Core 항시 적용</span>
+            </div>
+            <p class="skill-desc">간결한 엔지니어링, 첫 원칙 설계, 철저한 테스트 자동화 원칙을 적용합니다.</p>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">design-taste-frontend</span>
+              <span class="badge badge-accent">TasteSkill</span>
+            </div>
+            <p class="skill-desc">뻔한 템플릿과 불필요한 장식을 배제하고 품격 있는 타이포그래피와 따뜻한 색채를 적용합니다.</p>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">design-motion-principles</span>
+              <span class="badge badge-sub">Motion</span>
+            </div>
+            <p class="skill-desc">인터랙션 피드백과 부드러운 전환 애니메이션 원칙을 준수합니다.</p>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">graphify</span>
+              <span class="badge badge-sub">STANDARD/DEEP 조건부</span>
+            </div>
+            <p class="skill-desc">복합 코드베이스 지식 그래프 분석 및 모듈 간 의존성 관계를 파악합니다.</p>
+          </div>
+
+          <div class="skill-card">
+            <div class="skill-header">
+              <span class="skill-name">claude-mem</span>
+              <span class="badge badge-sub">DEEP 전용</span>
+            </div>
+            <p class="skill-desc">세션 간 영속 컨텍스트 및 작업 피드백 학습을 관리합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Usage View (W12) -->
+      <section id="view-usage" class="sub-view-panel view-panel">
+        <div class="view-headline">
+          <div>
+            <h1 class="view-title">사용량 및 비용 원장 (Usage Ledger)</h1>
+            <p class="view-desc">실제 측정된 모델 토큰 및 비용 원장입니다.</p>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <div class="table-container">
+            <table class="clean-table" id="usage-table">
+              <thead>
+                <tr>
+                  <th>실행 ID</th>
+                  <th>제공사 / 모델</th>
+                  <th>입력 토큰</th>
+                  <th>출력 토큰</th>
+                  <th>캐시 적중</th>
+                  <th>소요시간</th>
+                  <th>실측 비용</th>
+                  <th>신뢰도</th>
+                </tr>
+              </thead>
+              <tbody id="usage-body">
+                <tr><td colspan="8" class="table-empty">사용량 기록이 없습니다.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings Modal (W03 / Theme Configuration - Light, Dark, System) -->
+  <div class="modal-backdrop hidden" id="settings-modal-backdrop" onclick="closeSettingsModalOnBackdrop(event)">
+    <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+      <div class="settings-modal-header">
+        <h2 class="settings-modal-title" id="settings-modal-title">설정</h2>
+        <button class="settings-close-btn" onclick="closeSettingsModal()" aria-label="닫기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="settings-modal-body">
+        <!-- Theme Selection Group -->
+        <div class="settings-group">
+          <div class="settings-group-header">
+            <span class="settings-group-title">화면 테마</span>
+            <span class="settings-group-desc">작업 환경에 어울리는 색상 테마를 선택하세요.</span>
+          </div>
+
+          <div class="theme-options-grid">
+            <button type="button" class="theme-option-card" id="theme-opt-light" onclick="selectThemeOption('light')">
+              <div class="theme-card-preview preview-light"></div>
+              <div class="theme-card-meta">
+                <span class="theme-card-title">밝음</span>
+                <span class="theme-card-sub">Warm Paper</span>
+              </div>
+            </button>
+
+            <button type="button" class="theme-option-card" id="theme-opt-dark" onclick="selectThemeOption('dark')">
+              <div class="theme-card-preview preview-dark"></div>
+              <div class="theme-card-meta">
+                <span class="theme-card-title">어두움</span>
+                <span class="theme-card-sub">Charcoal</span>
+              </div>
+            </button>
+
+            <button type="button" class="theme-option-card" id="theme-opt-system" onclick="selectThemeOption('system')">
+              <div class="theme-card-preview preview-system"></div>
+              <div class="theme-card-meta">
+                <span class="theme-card-title">시스템</span>
+                <span class="theme-card-sub">OS 설정 동기화</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Orchestrator Governance Info -->
+        <div class="settings-group mt-5">
+          <div class="settings-group-header">
+            <span class="settings-group-title">거버넌스 및 실행 정책</span>
+            <span class="settings-group-desc">ASO 상위 오케스트레이터의 기본 정책입니다.</span>
+          </div>
+          <div class="settings-info-box">
+            <div class="settings-info-row">
+              <span class="info-label">플래너 구성</span>
+              <span class="badge badge-accent">단일 플래너 강제</span>
+            </div>
+            <div class="settings-info-row mt-2">
+              <span class="info-label">스킬 라우팅</span>
+              <span class="text-sub text-sm">최소 diff (ponytail) 기반 동적 선별</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Desktop Workspace Directory Picker Modal -->
+  <div class="modal-backdrop hidden" id="workspace-modal-backdrop" onclick="closeWorkspaceFolderModalOnBackdrop(event)">
+    <div class="settings-modal" style="max-width: 540px;" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
+      <div class="settings-modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <h2 class="settings-modal-title" id="workspace-modal-title">데스크탑 작업 공간(Workspace) 선택</h2>
+        </div>
+        <button class="settings-close-btn" onclick="closeWorkspaceFolderModal()" aria-label="닫기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="settings-modal-body">
+        <!-- Target Desktop Device -->
+        <div class="settings-group">
+          <div class="settings-group-header">
+            <span class="settings-group-title">연결된 데스크탑</span>
+            <span class="settings-group-desc">로컬 러너가 구동 중인 PC 환경입니다.</span>
+          </div>
+          <div id="modal-runner-device-info" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(var(--c-sunken), 0.5); border: 1px solid rgb(var(--c-line)); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              <strong id="modal-runner-name" style="font-size: 14px;">데스크탑 검색 중...</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge badge-accent" id="modal-runner-status">확인 중</span>
+              <button type="button" class="btn btn-ghost btn-sm text-danger" id="modal-runner-delete-btn" onclick="handleDeleteCurrentRunner()" title="이 데스크탑 러너 기기 등록 해제" style="font-size: 11px; color: rgb(var(--c-danger)); padding: 2px 8px; display: none;">기기 삭제</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Currently Selected Folder -->
+        <div class="settings-group mt-4">
+          <div class="settings-group-header">
+            <span class="settings-group-title">현재 활성 작업 폴더</span>
+            <span class="settings-group-desc">AI 에이전트와 러너가 코드 작성, 파일 읽기/수정을 실행할 로컬 디렉터리입니다.</span>
+          </div>
+          <div id="modal-active-path-box" style="padding: 10px 14px; background: rgba(var(--c-accent), 0.06); border: 1px solid rgba(var(--c-accent), 0.25); border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 13px;">
+            <span id="modal-active-path-text">설정된 경로 없음</span>
+          </div>
+        </div>
+
+        <!-- Allowed Folders List -->
+        <div class="settings-group mt-4">
+          <div class="settings-group-header">
+            <span class="settings-group-title">허가된 데스크탑 폴더 목록</span>
+            <span class="settings-group-desc">클릭 시 해당 디렉터리로 즉시 작업 공간이 전환됩니다.</span>
+          </div>
+          <div id="modal-allowed-paths-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto;">
+            <span class="text-faint text-sm">로딩 중...</span>
+          </div>
+        </div>
+
+        <!-- Add or Pick New Folder -->
+        <div class="settings-group mt-4">
+          <div class="settings-group-header">
+            <span class="settings-group-title">새 작업 폴더 추가 및 지정</span>
+            <span class="settings-group-desc">로컬 폴더를 직접 선택하거나 경로를 입력하여 권한을 부여하세요.</span>
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="triggerNativeFolderPicker()" style="flex: 1; border: 1px dashed rgb(var(--c-line)); padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              <span>브라우저에서 폴더 찾기</span>
+            </button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="modal-new-path-input" class="clean-input" style="flex: 1; font-size: 13px;" placeholder="예: C:\Users\aicam\my-project" />
+            <button type="button" class="btn btn-primary btn-sm" onclick="submitNewWorkspacePath()" style="white-space: nowrap;">작업 공간으로 지정</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gon Custom Confirmation Dialog Modal -->
+  <div class="modal-backdrop hidden" id="confirm-dialog-backdrop">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+      <div class="confirm-modal-top">
+        <div class="confirm-modal-icon-wrap" id="confirm-modal-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </div>
+        <div class="confirm-modal-content">
+          <h3 class="confirm-modal-title" id="confirm-modal-title">대화 기록 삭제</h3>
+          <p class="confirm-modal-desc" id="confirm-modal-desc">이 대화 기록을 삭제하시겠습니까? 삭제된 대화는 복구할 수 없습니다.</p>
+        </div>
+      </div>
+      <div class="confirm-modal-actions">
+        <button type="button" class="btn btn-ghost" id="confirm-modal-cancel-btn">취소</button>
+        <button type="button" class="btn btn-danger" id="confirm-modal-confirm-btn">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

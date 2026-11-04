@@ -1,0 +1,33 @@
+{
+  "providers": {
+    "openai": {
+      "byokApi": true,
+      "localNative": true,
+      "partnerOAuth": false
+    },
+    "anthropic": {
+      "byokApi": true,
+      "localNative": false,
+      "partnerOAuth": false
+    },
+    "google": {
+      "byokApi": true,
+      "localNative": false,
+      "partnerOAuth": false
+    }
+  },
+  "execution": {
+    "localRunner": true,
+    "cloudSandbox": false,
+    "parallelDAG": false
+  },
+  "commercial": {
+    "billingEnabled": false,
+    "teamsEnabled": false
+  },
+  "skills": {
+    "eccSpecialist": false,
+    "externalSkillInstall": false
+  }
+}
+

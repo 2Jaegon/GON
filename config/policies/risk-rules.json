@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "deepKeywords": [
+    "auth", "authentication", "login", "oauth", "인증", "로그인", "권한", "permission", "rbac",
+    "payment", "결제", "billing", "과금",
+    "privacy", "개인정보", "pii", "secret", "비밀번호", "password", "credential",
+    "delete", "drop", "truncate", "삭제", "제거", "destructive",
+    "migration", "마이그레이션", "db schema", "스키마",
+    "production", "deploy", "배포", "운영", "prod",
+    "refactor", "리팩터링", "리팩토링", "architecture", "아키텍처", "multi-package", "다중 모듈"
+  ],
+  "fastKeywords": [
+    "typo", "오타", "comment", "주석", "문구", "텍스트", "rename", "이름변경", "단순수정",
+    "docstring", "readme", "간단", "quick", "formatting", "서식"
+  ],
+  "fastMaxFiles": 2
+}
+

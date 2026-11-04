@@ -1,0 +1,23 @@
+{
+  "name": "@aso/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aso/contracts": "*",
+    "@aso/database": "*",
+    "@aso/core": "*",
+    "@aso/provider-adapters": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.9"
+  }
+}
+

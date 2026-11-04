@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "effectiveDate": null,
+  "note": "모델별 백만 토큰당 가격표(USD). 사용자가 확정하기 전까지 비워 두며, 비어 있으면 비용은 unknown으로 표기합니다.",
+  "models": {}
+}
+
