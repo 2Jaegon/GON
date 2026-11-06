@@ -1,0 +1,261 @@
+{
+  "categories": [
+    {
+      "id": "C1",
+      "name": "셀카·일상 스냅",
+      "triggers": ["셀카", "거울샷", "카페에서", "창가", "차 안", "공원", "러닝", "침대", "복도", "밤거리", "selfie", "candid snapshot"],
+      "requiredRefs": {
+        "count": 0,
+        "role": "optional_identity"
+      },
+      "template": "A candid {shot_size} selfie taken on a modern smartphone {camera_side}, {angle}. Subject: {age_range} {gender}, {expression}, gaze {gaze}. Hair: {hair}. Makeup: {makeup}. Outfit: {top}, {bottom}, {accessories}. Pose: {pose_hands_body}. Setting: {place}, background {background_details}, {depth}. Light: {light_source_and_direction}, {color_temperature}. Color and mood: {palette}, {mood_words}. Slight phone camera grain, casual everyday feel, not a studio shoot. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B7", "B15", "B16"]
+    },
+    {
+      "id": "C2",
+      "name": "레트로 기기·플래시 스냅",
+      "triggers": ["디카", "똑딱이", "CCD", "Y2K", "플래시", "필름", "흔들린", "저화질", "retro flash", "vintage digicam"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "person"
+      },
+      "template": "An offhand snapshot from a {device_feel}, not a model shoot. Framing: {shot_size}, {angle}; camera positioned {camera_position}. Flash: strong direct on-camera flash illuminating the face and shoulders, background {place} falling into darkness with hard shadows. Low saturation, low contrast, faint yellowish cast, mild haze and bloom, slightly soft focus, subtle noise. No HDR, no sharpening, no crisp modern digital look. Expression: {expression}, gaze {gaze}. Hair: {hair}. Outfit: {outfit}. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B8", "B15", "B16", "B20"]
+    },
+    {
+      "id": "C3",
+      "name": "장소·여행 화보",
+      "triggers": ["여행 사진", "여행 화보", "피크닉", "몽환적인", "뽀샤시", "역광", "블룸", "햇살 가득", "travel photo", "dreamy bloom"],
+      "requiredRefs": {
+        "count": 0,
+        "role": "optional_identity"
+      },
+      "template": "A candid {shot_size} travel photo at {location}, {season_time_weather}. Subject: {action_pose}, gaze {gaze}, {expression}. Outfit: {outfit_with_fabric_and_fit}. Environment details: {landmarks_props_scenery}. Capture style: {device_feel}; {light_style}. Color: {grading}. Mood: {mood_words}. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B9", "B15", "B16"]
+    },
+    {
+      "id": "C4",
+      "name": "카메라 앵글·프레이밍",
+      "triggers": ["로우앵글", "부감", "하이앵글", "탑뷰", "옆모습", "측면", "45도", "어깨 너머", "클로즈업", "전신", "눈높이", "camera angle", "framing study"],
+      "requiredRefs": {
+        "count": 0,
+        "role": "optional_identity"
+      },
+      "template": "A photographic study of {gender} in a clean minimalist studio. Outfit: {outfit}. Background: seamless solid neutral backdrop with soft even lighting. Camera angle: {angle_phrase}. Framing: {framing}. Maintain consistent pose, lighting, and expression while varying only the camera viewpoint. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B5", "B6", "B15", "B16"]
+    },
+    {
+      "id": "C5",
+      "name": "부분 편집",
+      "triggers": ["웃게 해줘", "표정 바꿔", "포즈 바꿔", "머리 스타일 바꿔", "단발로", "앞머리", "조명 바꿔", "배경만 바꿔", "edit photo", "change expression", "change pose"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "source_image"
+      },
+      "template": "Edit the source image. Change only the {target_feature}. Desired modification: {desired_value}. Keep clothing, skin texture, camera angle, and unmentioned elements identical to original. Realism requirement: {realism_details}. Avoid artificial symmetry or warped background. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B3", "B4", "B19", "B20"]
+    },
+    {
+      "id": "C6",
+      "name": "의상 합성·교체",
+      "triggers": ["옷 입혀줘", "옷 바꿔", "코디 합성", "룩북", "착장", "가방 추가", "신발 바꿔", "아우터", "outfit swap", "virtual try on"],
+      "requiredRefs": {
+        "count": 2,
+        "role": "person_and_garment"
+      },
+      "template": "Transfer the garment from the clothing reference onto the person reference. Dress the person in {item_type}. Maintain original facial identity, pose, body proportions, and background. Transfer cut, fabric texture, seams, closures, and drape realistically following gravity and posture. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B12", "B13", "B15", "B16"]
+    },
+    {
+      "id": "C7",
+      "name": "커머스 상품 이미지",
+      "triggers": ["상품 사진", "누끼", "고스트 마네킹", "제품컷", "상세페이지", "착용컷", "리뷰 사진", "UGC", "commerce product", "product photography"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "product"
+      },
+      "template": "Commercial product photography for {product_name}. Style: {presentation_style}. Garment maintains realistic 3D hollow shape on seamless pure white background, soft balanced studio lighting with subtle grounding shadow beneath. True colors, precise stitching, fabric weave, and hardware textures preserved without distortion. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B11", "B12", "B13", "B15"]
+    },
+    {
+      "id": "C8",
+      "name": "인물·캐릭터 시트",
+      "triggers": ["인물 시트", "캐릭터 시트", "레퍼런스 시트", "턴어라운드", "표정 모음", "이모티콘 시트", "스티커", "character sheet", "turnaround reference"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "identity_or_character"
+      },
+      "template": "A multi-panel model reference sheet for {character_name} on clean white background. Layout: {sheet_layout}. Maintain identical identity, proportions, costume details, and soft studio lighting across all views. Neutral expression, consistent scale, clean separation between panels. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B10", "B15", "B16"]
+    },
+    {
+      "id": "C9",
+      "name": "다컷·콜라주",
+      "triggers": ["12컷", "3컷", "콜라주", "스크랩북", "여행 모음", "세로 3분할", "캐러셀", "졸업앨범", "collage", "multi-panel"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "subject_reference"
+      },
+      "template": "A cohesive multi-panel {panel_count}-image collage arranged as {layout_grid}. Subject remains the same across all panels: {subject_traits}. Each frame captures a distinct candid moment: {scenes_list}. Consistent atmospheric color grading, natural candid framing, authentic texture. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B7", "B10", "B15"]
+    },
+    {
+      "id": "C10",
+      "name": "보정·업스케일",
+      "triggers": ["화질 올려줘", "업스케일", "선명하게", "8K", "실사처럼", "AI 티 안 나게", "피부 플라스틱", "잡티 제거", "upscale polish", "enhance realism"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "original_image"
+      },
+      "template": "High-fidelity photorealistic enhancement of the original image. Retain subject identity, pose, expression, clothing, lighting, and composition exactly. Refine microscopic detail: crisp iris definition, individual eyelashes and hair strands, realistic skin micro-pores, authentic fabric weave. Eliminate digital artifacts and plastic waxy smoothing. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B2", "B3", "B18", "B20"]
+    },
+    {
+      "id": "C11",
+      "name": "손글씨·낙서 꾸미기",
+      "triggers": ["손글씨", "낙서", "메모", "인스타 스토리", "OOTD 꾸미기", "주석", "handwritten doodle", "scrapbook notes"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "photo_to_decorate"
+      },
+      "template": "Preserve the base photograph without modification. Overlay hand-drawn doodle accents and annotations in {pen_style} with playful imperfect lines. Include delicate arrows guiding toward {highlighted_elements} and small decorative doodles ({doodles}). Short handwritten captions placed only in negative space, never obscuring faces or subjects. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B15", "B17"]
+    },
+    {
+      "id": "C12",
+      "name": "썸네일·UI 쇼케이스",
+      "triggers": ["유튜브 썸네일", "썸네일", "리액션 썸네일", "UI 쇼케이스", "앱 화면", "목업", "video thumbnail", "ui showcase"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "subject_or_screen"
+      },
+      "template": "High-impact visual composition featuring {main_subject} in {environment}. Composition: {framing_style} with prominent focal hierarchy, subtle rim lighting, and clean graphic contrast. Foreground floating glassmorphic interface display representing {interface_type} rendered with authentic perspective, soft ambient glow, and sharp legible typography. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B1", "B14", "B15"]
+    },
+    {
+      "id": "C13",
+      "name": "스타일 변환·혼합",
+      "triggers": ["3D 캐릭터", "3D로 바꿔", "카툰 동물", "만화 동물", "컨셉아트", "style blend", "cartoon composite"],
+      "requiredRefs": {
+        "count": 1,
+        "role": "source_or_character"
+      },
+      "template": "Creative stylized composite based on the reference image. Style transformation: {style_description}. Harmonize lighting direction, contact shadows, and focal depth between the realistic background and stylized elements so the scene feels naturally integrated rather than pasted. Aspect ratio {ratio}.",
+      "ruleBlocks": ["B14", "B15", "B16"]
+    }
+  ],
+  "ruleBlocks": {
+    "B1": {
+      "id": "B1",
+      "name": "Skin Realism",
+      "instruction": "Keep skin true to life: fine pores, faint natural texture, and soft natural blush remain visible; avoid airbrushing, plastic sheen, or waxy porcelain finishes."
+    },
+    "B2": {
+      "id": "B2",
+      "name": "Identity Lock",
+      "instruction": "Maintain exact facial identity from reference: precise bone structure, eye shape and spacing, nose contour, lip volume, jawline, hairline, and skin undertone; do not re-beautify or alter ethnic appearance."
+    },
+    "B3": {
+      "id": "B3",
+      "name": "Scene Lock",
+      "instruction": "Fix background environment, ambient lighting, color temperature, and camera perspective strictly identical to the original image."
+    },
+    "B4": {
+      "id": "B4",
+      "name": "Single Change",
+      "instruction": "Only modify the designated target attribute; all other elements including attire, background, posture, and lighting must remain completely unaltered."
+    },
+    "B5": {
+      "id": "B5",
+      "name": "Full Body Framing",
+      "instruction": "Camera pulled back to show full body from head to feet with balanced margins above head and below shoes; subject occupies roughly 60-70% of frame height."
+    },
+    "B6": {
+      "id": "B6",
+      "name": "Angle Lexicon",
+      "instruction": "Camera angle explicitly determines perspective: low angle expands legs and height; bird's-eye emphasizes crown and shoulders; 3/4 profile rotates body 45 degrees; profile view provides clean 90-degree silhouette."
+    },
+    "B7": {
+      "id": "B7",
+      "name": "Phone Camera Realism",
+      "instruction": "Subtle mobile camera realism: minor optical handheld softness, candid off-center framing, faint highlights bloom, natural dynamic range, and authentic everyday texture without clinical studio perfection."
+    },
+    "B8": {
+      "id": "B8",
+      "name": "Retro Flash",
+      "instruction": "On-camera direct flash illuminates subject while background falls into deeper shadow; hard drop shadow behind subject, slight warm-yellow color cast, gentle grain, and nostalgic compact digicam exposure."
+    },
+    "B9": {
+      "id": "B9",
+      "name": "Dreamy Bloom",
+      "instruction": "Luminous window backlight with ethereal bloom, creamy softened highlights, gentle atmospheric haze, pastel muted palette, and lowered contrast."
+    },
+    "B10": {
+      "id": "B10",
+      "name": "Grid Lock",
+      "instruction": "Exact panel count and uniform grid layout: equal cell dimensions and margins, single role per cell, consistent scale and lighting across all frames."
+    },
+    "B11": {
+      "id": "B11",
+      "name": "Pure White Background",
+      "instruction": "Uniform pure white background (#FFFFFF) with zero color cast, no vignette, and only a soft natural contact grounding shadow directly beneath the item."
+    },
+    "B12": {
+      "id": "B12",
+      "name": "Apparel Fidelity",
+      "instruction": "Preserve garment silhouette, tailored drape, seam lines, fastenings, pockets, authentic material weight, and exact colorways without arbitrary embellishments."
+    },
+    "B13": {
+      "id": "B13",
+      "name": "Worn Realism",
+      "instruction": "Natural fabric folds, wrinkles, and compression reacting realistically to human posture and gravity; seamless interaction with body contours without floating or pasted appearance."
+    },
+    "B14": {
+      "id": "B14",
+      "name": "Composite Integration",
+      "instruction": "Inserted stylized or source elements must respect scene perspective, lighting direction, ambient reflections, edge blur, and contact shadows for natural scene cohesion."
+    },
+    "B15": {
+      "id": "B15",
+      "name": "Text Policy",
+      "instruction": "Zero arbitrary text, logos, or watermarks unless explicitly specified in quotes; any requested text must be rendered accurately in designated empty space without obscuring key subjects."
+    },
+    "B16": {
+      "id": "B16",
+      "name": "Anatomy Negative",
+      "instruction": "Strict anatomical correctness: exactly five fingers per hand, correct joint articulation, symmetrical facial landmarks, no duplicated limbs, and natural posture."
+    },
+    "B17": {
+      "id": "B17",
+      "name": "Non-Destructive Overlay",
+      "instruction": "Do not regenerate or alter the underlying photograph; apply hand-drawn doodles and annotations purely as an overlay in negative space."
+    },
+    "B18": {
+      "id": "B18",
+      "name": "Quality Suffix Caution",
+      "instruction": "Avoid generic quality buzzwords that induce artificial plastic textures or over-sharpening; emphasize photographic realism through physical optical properties."
+    },
+    "B19": {
+      "id": "B19",
+      "name": "Portrait Lighting Lexicon",
+      "instruction": "Apply classical portrait lighting schemas: Rembrandt triangle, loop shadow, butterfly under nose, split side light, or gentle clamshell beauty lighting as requested."
+    },
+    "B20": {
+      "id": "B20",
+      "name": "Failure Recovery",
+      "instruction": "If generation diverges from reference identity, reinforce facial feature constraints; if skin appears synthetic, re-inject micro-texture and grain; if elements distort, fallback to incremental step edits."
+    }
+  },
+  "excluded": [
+    {
+      "id": "C14",
+      "name": "Video-only Prompts",
+      "reason": "Video generation prompts (e.g. lip-sync, 180 pan, 90 side view, wipe transitions) are excluded from static image generation catalog."
+    },
+    {
+      "id": "C15",
+      "name": "Text Analysis and Meta Prompts",
+      "reason": "Analytical meta prompts used for image reverse-engineering and prompt synthesis rather than direct image generation."
+    }
+  ]
+}
