@@ -110,4 +110,21 @@ describe("Agent System Prompt & Image Generation Instructions", () => {
     expect(capturedOpts!.appendSystemPrompt).toBeDefined();
     expect(capturedOpts!.appendSystemPrompt).toContain("gen-image.mjs");
   });
+
+  it("buildAgentSystemPrompt includes grilling guidelines when grilling is true", () => {
+    const prompt = buildAgentSystemPrompt({ grilling: true });
+    expect(prompt).toContain("[Grilling]");
+    expect(prompt).toContain("AskUserQuestion");
+    expect(prompt).toContain("추천");
+  });
+
+  it("buildAgentSystemPrompt excludes grilling guidelines when grilling is false", () => {
+    const prompt = buildAgentSystemPrompt({ grilling: false });
+    expect(prompt).not.toContain("[Grilling]");
+  });
+
+  it("buildAgentSystemPrompt defaults grilling to true", () => {
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain("[Grilling]");
+  });
 });
