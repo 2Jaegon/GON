@@ -2743,6 +2743,7 @@ async function submitChatPrompt() {
 
   const mode = document.getElementById("run-mode-select") ? document.getElementById("run-mode-select").value : "auto";
   const requireApproval = document.getElementById("run-approval-check") ? document.getElementById("run-approval-check").checked : false;
+  const skipGrilling = document.getElementById("skip-grilling-checkbox") ? document.getElementById("skip-grilling-checkbox").checked : false;
 
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`, {
@@ -2756,6 +2757,7 @@ async function submitChatPrompt() {
         connectionId: modelSelection?.connectionId,
         model: modelSelection?.model,
         effort: modelSelection?.effort || undefined,
+        skipGrilling,
         attachments: currentAttachments.map(f => ({
           name: f.name,
           size: f.size,
@@ -2763,7 +2765,7 @@ async function submitChatPrompt() {
           dataUrl: f.dataUrl,
           text: f.text
         })),
-        options: { requirePlanApproval: requireApproval }
+        options: { requirePlanApproval: requireApproval, skipGrilling }
       })
     });
 

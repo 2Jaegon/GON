@@ -84,6 +84,7 @@ export async function runRoutes(
         connectionId: dto.connectionId ?? null,
         model: dto.model ?? null,
         effort: dto.effort ?? null,
+        skipGrilling: Boolean(dto.skipGrilling || dto.options?.skipGrilling),
         cwd
       }
     });

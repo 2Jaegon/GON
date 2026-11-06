@@ -228,8 +228,10 @@ export class AgentService {
     };
 
     let result: AgentResult;
+    const isSkipGrilling = Boolean((run.runContext as any)?.skipGrilling);
     const appendSystemPrompt = buildAgentSystemPrompt({
-      image: { gonRoot: process.cwd() }
+      image: { gonRoot: process.cwd() },
+      grilling: !isSkipGrilling
     });
 
     try {

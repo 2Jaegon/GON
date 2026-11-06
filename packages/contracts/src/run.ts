@@ -190,9 +190,11 @@ export const CreateRunDTOSchema = z.object({
     .object({
       requirePlanApproval: z.boolean().default(true),
       allowExternalSkills: z.boolean().default(false),
-      createPullRequest: z.boolean().default(false)
+      createPullRequest: z.boolean().default(false),
+      skipGrilling: z.boolean().optional()
     })
-    .optional()
+    .optional(),
+  skipGrilling: z.boolean().optional()
 });
 export type CreateRunDTO = z.infer<typeof CreateRunDTOSchema>;
 
