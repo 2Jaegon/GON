@@ -1,11 +1,24 @@
+import crypto from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { Server as HttpServer } from "node:http";
 import { IDatabase } from "@aso/database";
 import { generateNonce, verifyChallenge, RunnerMessage } from "@aso/execution-protocol";
 
+export type FolderPickOutcome =
+  | { status: "picked"; path: string }
+  | { status: "cancelled" | "unsupported" | "timeout" | "offline" };
+
 export class RunnerGateway {
   private wss: WebSocketServer | null = null;
   private connectedRunners = new Map<string, { ws: WebSocket; deviceId: string }>();
+  private pendingFolderPicks = new Map<
+    string,
+    {
+      deviceId: string;
+      resolve: (outcome: FolderPickOutcome) => void;
+      timer: NodeJS.Timeout;
+    }
+  >();
 
   constructor(private db: IDatabase) {}
 
@@ -56,6 +69,25 @@ export class RunnerGateway {
             }));
           } else if (msg.type === "HEARTBEAT" && authenticatedDeviceId) {
             await this.db.runners.updateStatus(authenticatedDeviceId, "online");
+          } else if (msg.type === "PICK_FOLDER_RESULT" && authenticatedDeviceId) {
+            const { requestId, path, cancelled, unsupported } = (msg.payload || {}) as {
+              requestId?: string;
+              path?: string;
+              cancelled?: boolean;
+              unsupported?: boolean;
+            };
+            if (requestId && this.pendingFolderPicks.has(requestId)) {
+              const pending = this.pendingFolderPicks.get(requestId)!;
+              clearTimeout(pending.timer);
+              this.pendingFolderPicks.delete(requestId);
+              if (typeof path === "string" && path.trim().length > 0) {
+                pending.resolve({ status: "picked", path: path.trim() });
+              } else if (unsupported) {
+                pending.resolve({ status: "unsupported" });
+              } else {
+                pending.resolve({ status: "cancelled" });
+              }
+            }
           }
         } catch (err) {
           // ignore malformed message
@@ -66,6 +98,14 @@ export class RunnerGateway {
         if (authenticatedDeviceId) {
           this.connectedRunners.delete(authenticatedDeviceId);
           await this.db.runners.updateStatus(authenticatedDeviceId, "offline");
+
+          for (const [reqId, pending] of this.pendingFolderPicks.entries()) {
+            if (pending.deviceId === authenticatedDeviceId) {
+              clearTimeout(pending.timer);
+              this.pendingFolderPicks.delete(reqId);
+              pending.resolve({ status: "offline" });
+            }
+          }
         }
       });
     });
@@ -83,6 +123,42 @@ export class RunnerGateway {
       } catch {}
       this.connectedRunners.delete(deviceId);
     }
+  }
+
+  public requestFolderPick(
+    deviceId: string,
+    timeoutMs = 120_000
+  ): Promise<FolderPickOutcome> {
+    const conn = this.connectedRunners.get(deviceId);
+    if (!conn || conn.ws.readyState !== WebSocket.OPEN) {
+      return Promise.resolve({ status: "offline" });
+    }
+
+    const requestId = crypto.randomUUID();
+    return new Promise<FolderPickOutcome>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingFolderPicks.delete(requestId);
+        resolve({ status: "timeout" });
+      }, timeoutMs);
+
+      this.pendingFolderPicks.set(requestId, {
+        deviceId,
+        resolve,
+        timer
+      });
+
+      try {
+        conn.ws.send(JSON.stringify({
+          type: "PICK_FOLDER",
+          timestamp: new Date().toISOString(),
+          payload: { requestId }
+        }));
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingFolderPicks.delete(requestId);
+        resolve({ status: "offline" });
+      }
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
 import { RunnerLocalConfig } from "./config.js";
 import { JobExecutor } from "./executor.js";
+import { pickFolder } from "./folder-picker.js";
 import { RunnerMessage, signChallenge } from "@aso/execution-protocol";
 
 export class RunnerClient {
@@ -76,6 +77,23 @@ export class RunnerClient {
               deviceId: this.config.deviceId,
               timestamp: new Date().toISOString(),
               payload: { result }
+            }));
+          } else if (msg.type === "PICK_FOLDER") {
+            const { requestId } = msg.payload || {};
+            const pick = await pickFolder();
+            const payload: { requestId: string; path?: string; cancelled?: boolean; unsupported?: boolean } = { requestId };
+            if ("path" in pick) {
+              payload.path = pick.path;
+            } else if ("cancelled" in pick) {
+              payload.cancelled = true;
+            } else if ("unsupported" in pick) {
+              payload.unsupported = true;
+            }
+            this.ws?.send(JSON.stringify({
+              type: "PICK_FOLDER_RESULT",
+              deviceId: this.config.deviceId,
+              timestamp: new Date().toISOString(),
+              payload
             }));
           }
         } catch (err) {

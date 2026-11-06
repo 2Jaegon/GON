@@ -10,7 +10,9 @@ export type RunnerMessageType =
   | "JOB_ACK"
   | "JOB_PROGRESS"
   | "JOB_RESULT"
-  | "JOB_CANCEL";
+  | "JOB_CANCEL"
+  | "PICK_FOLDER"
+  | "PICK_FOLDER_RESULT";
 
 export interface RunnerMessage<T = any> {
   type: RunnerMessageType;
@@ -52,4 +54,16 @@ export interface JobProgressPayload {
 export interface JobResultPayload {
   result: RunnerTaskResult;
 }
+
+export interface PickFolderPayload {
+  requestId: string;
+}
+
+export interface PickFolderResultPayload {
+  requestId: string;
+  path?: string;
+  cancelled?: boolean;
+  unsupported?: boolean;
+}
+
 

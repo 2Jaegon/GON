@@ -202,4 +202,43 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
       message: "Runner device successfully deleted and unregistered"
     });
   });
+
+  // Pick folder from runner device via OS native dialog
+  server.post("/api/v1/workspaces/:workspaceId/runners/:deviceId/pick-folder", async (req, reply) => {
+    const { workspaceId, deviceId } = req.params as { workspaceId: string; deviceId: string };
+    const device = await db.runners.findById(deviceId);
+    if (!device || device.workspaceId !== workspaceId) {
+      return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
+    }
+
+    if (!runnerGateway) {
+      return reply.status(409).send({ error: { code: "RUNNER_OFFLINE", message: "PC의 러너를 켜 주세요" } });
+    }
+
+    const outcome = await runnerGateway.requestFolderPick(deviceId);
+    if (outcome.status === "picked") {
+      const cleanPath = normalizePath(outcome.path);
+      syncLocalRunnerAllowedPath(cleanPath);
+      const updatedDevice = await db.runners.addAllowedPath(deviceId, cleanPath, true);
+      const updated = updatedDevice ? toRunnerView(updatedDevice) : null;
+      return reply.status(200).send({
+        activePath: cleanPath,
+        allowedPaths: updated ? updated.allowedPaths : [cleanPath]
+      });
+    }
+
+    if (outcome.status === "cancelled") {
+      return reply.status(200).send({ cancelled: true });
+    }
+
+    if (outcome.status === "offline") {
+      return reply.status(409).send({ error: { code: "RUNNER_OFFLINE", message: "PC의 러너를 켜 주세요" } });
+    }
+
+    if (outcome.status === "unsupported") {
+      return reply.status(422).send({ error: { code: "UNSUPPORTED_PLATFORM", message: "이 OS에서는 아직 폴더 창을 못 띄워요" } });
+    }
+
+    return reply.status(504).send({ error: { code: "TIMEOUT", message: "폴더 선택 시간이 초과되었어요" } });
+  });
 }
