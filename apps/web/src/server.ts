@@ -19,7 +19,18 @@ export async function createWebServer() {
       reqPath = "/index.html";
     }
 
-    const filePath = path.join(PUBLIC_DIR, reqPath);
+    let decodedPath: string;
+    try {
+      decodedPath = decodeURIComponent(reqPath);
+    } catch {
+      return reply.code(404).send("Not Found");
+    }
+
+    const filePath = path.resolve(PUBLIC_DIR, "." + decodedPath);
+    if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
+      return reply.code(404).send("Not Found");
+    }
+
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       const fallback = path.join(PUBLIC_DIR, "index.html");
       const html = fs.readFileSync(fallback, "utf8");

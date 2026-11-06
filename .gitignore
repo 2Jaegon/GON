@@ -24,3 +24,6 @@ dist/
 .aso-runner/
 data/
 *.log
+
+# 환경 변수 비밀값 (.env.example은 공개 대상이라 무시하지 않음)
+.env
