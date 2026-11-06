@@ -47,7 +47,7 @@ describe("ASO Web API End-to-End Integration", () => {
     expect(body.role).toBe("owner");
   });
 
-  it("POST /api/v1/workspaces/:w/connections/api-key securely registers BYOK key", async () => {
+  it("POST /api/v1/workspaces/:w/connections/api-key returns 501 NOT_IMPLEMENTED", async () => {
     const res = await server.inject({
       method: "POST",
       url: `/api/v1/workspaces/${workspaceId}/connections/api-key`,
@@ -56,11 +56,11 @@ describe("ASO Web API End-to-End Integration", () => {
         apiKey: "sk-openai-test-key-1234567890abcdef"
       }
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(501);
     const body = JSON.parse(res.body);
-    expect(body.provider).toBe("openai");
-    expect(body.status).toBe("connected");
-    expect(body.apiKey).toBeUndefined(); // Zero secret leakage!
+    expect(body.error?.code).toBe("NOT_IMPLEMENTED");
+    expect(body.error?.message).toContain("API 키 연결은 준비 중이에요");
+    expect(JSON.stringify(body)).not.toContain("sk-openai-test-key");
   });
 
   it("issues and redeems local runner pairing code", async () => {

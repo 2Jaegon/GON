@@ -145,13 +145,13 @@
 
             <div class="profile-dropdown-divider"></div>
 
-            <!-- 3. BYOK Connection Selection -->
+            <!-- 3. Subscription Connection Selection -->
             <button type="button" class="profile-dropdown-item" onclick="openConnectionsFromProfile()" role="menuitem">
               <svg class="dropdown-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              <span>모델 연결 (BYOK)</span>
+              <span>AI 구독 연결</span>
             </button>
 
             <!-- 4. Runner Pairing Selection -->
@@ -338,44 +338,27 @@
         </div>
       </section>
 
-      <!-- 2. Connections View (W10) -->
+      <!-- 2. Connections View (AI Subscription Connections) -->
       <section id="view-connections" class="sub-view-panel view-panel">
-        <div class="view-headline">
+        <div class="view-headline" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h1 class="view-title">AI 모델 연결 (BYOK Vault)</h1>
-            <p class="view-desc">사용자 본인의 AI API Key를 암호화하여 저장하며, 비밀은 절대 화면이나 로그에 노출되지 않습니다.</p>
+            <h1 class="view-title">AI 구독 연결</h1>
+            <p class="view-desc">로컬에 설치된 사용자의 AI CLI 구독을 감지하여 연결합니다.</p>
           </div>
+          <button id="detect-subs-btn" class="btn btn-ghost btn-sm" onclick="detectSubscriptions()" style="display: flex; align-items: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>구독 감지</span>
+          </button>
         </div>
 
-        <div class="content-card">
+        <div class="content-card mt-4">
           <div class="card-header">
-            <h2 class="card-title">새 API Key 등록</h2>
-            <span class="badge badge-accent">AES-256 Vault</span>
-          </div>
-
-          <div class="form-grid-2 mt-4">
-            <div class="field-item">
-              <label for="byok-provider" class="field-label">AI 제공사</label>
-              <select id="byok-provider" class="clean-select full-width">
-                <option value="openai">OpenAI (GPT-4o, o3-mini)</option>
-                <option value="anthropic">Anthropic (Claude 3.7 Sonnet)</option>
-                <option value="google">Google (Gemini 2.5 Flash / Pro)</option>
-              </select>
-            </div>
-            <div class="field-item">
-              <label for="byok-key" class="field-label">API Key</label>
-              <input type="password" id="byok-key" class="clean-input full-width" placeholder="sk-...">
-            </div>
-          </div>
-          <button class="btn btn-primary mt-4" onclick="registerApiKey()">암호화 등록</button>
-        </div>
-
-        <div class="content-card mt-5">
-          <div class="card-header">
-            <h2 class="card-title">등록된 커넥터 목록</h2>
+            <h2 class="card-title">연결된 AI 구독</h2>
           </div>
           <div id="connections-list" class="connector-grid mt-3">
-            <p class="text-faint">연결된 API Key가 없습니다.</p>
+            <p class="text-faint">연결된 AI가 없어요.</p>
           </div>
         </div>
       </section>

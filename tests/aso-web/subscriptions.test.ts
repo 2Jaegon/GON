@@ -60,5 +60,32 @@ describe("Subscription Connection & Provider Routing", () => {
     const hasNativeCli = body.items.some((item: any) => item.mode === "LOCAL_NATIVE_CLI");
     expect(hasNativeCli).toBe(true);
   });
+
+  it("POST /connections/api-key returns 501 and does not create any USER_API_KEY connection", async () => {
+    const db = createDatabase(":memory:");
+    const { server } = await createApiServer({ db, logger: false, cliRunner });
+    const wsId = "00000000-0000-7000-8000-000000000002";
+
+    const res = await server.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${wsId}/connections/api-key`,
+      payload: {
+        provider: "anthropic",
+        apiKey: "sk-ant-fake-key-12345"
+      }
+    });
+
+    expect(res.statusCode).toBe(501);
+    const body = JSON.parse(res.body);
+    expect(body.error?.code).toBe("NOT_IMPLEMENTED");
+    expect(body.error?.message).toContain("API 키 연결은 준비 중이에요");
+
+    const getRes = await server.inject({
+      method: "GET",
+      url: `/api/v1/workspaces/${wsId}/connections`
+    });
+    const getBody = JSON.parse(getRes.body);
+    expect(getBody.items.some((item: any) => item.mode === "USER_API_KEY")).toBe(false);
+  });
 });
 

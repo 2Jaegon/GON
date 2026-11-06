@@ -2467,41 +2467,33 @@ async function viewRun(runId) {
 }
 
 // ==========================================================================
-// BYOK Key Registration (W10)
+// AI Subscriptions
 // ==========================================================================
 
-async function registerApiKey() {
-  const provider = document.getElementById("byok-provider").value;
-  const key = document.getElementById("byok-key").value.trim();
-  if (!key) {
-    alert("API Key를 입력하세요.");
-    return;
-  }
-  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/api-key`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, apiKey: key })
-  });
-  if (res.ok) {
-    alert("암호화되어 안전하게 등록되었습니다.");
-    document.getElementById("byok-key").value = "";
-    loadConnections();
-  }
-}
-
-async function checkConnectionHealth(connectionId) {
+async function detectSubscriptions() {
   if (!currentWorkspaceId) return;
+  const btn = document.getElementById("detect-subs-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "감지 중…";
+  }
   try {
-    const btn = document.getElementById(`health-btn-${connectionId}`);
-    if (btn) btn.textContent = "점검 중...";
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${connectionId}/health-check`, {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/detect-subscriptions`, {
       method: "POST"
     });
     if (res.ok) {
       await loadConnections();
+      showToast("구독 AI 목록을 갱신했어요", "success");
+    } else {
+      showToast("구독 감지 실패", "error");
     }
   } catch (err) {
-    console.error("Health check error:", err);
+    showToast("구독 감지 오류: " + err.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "구독 감지";
+    }
   }
 }
 
@@ -2512,34 +2504,22 @@ async function loadConnections() {
     const data = await res.json();
     const grid = document.getElementById("connections-list");
     if (!grid) return;
-    if (data.items.length === 0) {
-      grid.innerHTML = `<p class="text-faint">등록된 AI 구독 또는 API Key가 없습니다.</p>`;
+    if (!data.items || data.items.length === 0) {
+      grid.innerHTML = `<p class="text-faint">연결된 AI가 없어요.</p>`;
       return;
     }
     grid.innerHTML = data.items.map((c) => {
-      const isSub = c.mode === "LOCAL_NATIVE_CLI";
-      const isConnected = c.status === "connected";
-      const badgeClass = isConnected ? "badge-success" : (c.status === "needs_action" ? "badge-warning" : "badge-accent");
-      const statusLabel = isConnected ? "연결됨 (정상)" : (c.status === "needs_action" ? "조치 필요 (한도/로그인)" : c.status);
-      const subBadge = isSub ? `<span class="badge" style="background:#eef2ff;color:#4f46e5;font-weight:600;margin-left:6px;">개인 구독 (Local Native CLI)</span>` : "";
+      const isNeedsAction = c.status === "needs_action";
+      const dot = isNeedsAction
+        ? `<span class="status-dot warning" title="${escapeHtml(c.details || '조치가 필요해요')}" style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;margin-left:8px;"></span>`
+        : "";
 
       return `
-        <div class="content-card" style="margin-bottom:12px;border:1px solid var(--border-subtle, #e5e7eb);border-radius:10px;padding:16px;">
-          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <strong style="font-size:15px;">${escapeHtml(c.displayName)}</strong>
-              ${subBadge}
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span class="badge ${badgeClass}" style="padding:4px 8px;border-radius:6px;font-size:12px;">${statusLabel}</span>
-              <button id="health-btn-${c.id}" class="btn btn-sm" onclick="checkConnectionHealth('${c.id}')" style="font-size:12px;padding:4px 10px;cursor:pointer;">상태 점검</button>
-            </div>
-          </div>
-          <div class="text-sub text-sm mt-2" style="color:var(--text-muted, #6b7280);line-height:1.5;">
-            ${c.details ? `<div><strong>상세:</strong> ${escapeHtml(c.details)}</div>` : ""}
-            <div><strong>과금:</strong> ${isSub ? "사용자 AI 구독 계정 직접 활용 ($0 추가 과금 없음)" : "BYOK API Key 직접 과금"}</div>
-            <div><strong>지원 기능:</strong> ${c.capabilities ? c.capabilities.join(", ") : "plan, code, chat"}</div>
-            ${c.lastHealthCheckAt ? `<div style="font-size:11px;color:#9ca3af;margin-top:4px;">최근 점검: ${new Date(c.lastHealthCheckAt).toLocaleTimeString()}</div>` : ""}
+        <div class="content-card" style="margin-bottom:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border:1px solid rgb(var(--c-line));border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="22" height="22" style="border-radius:4px;flex-shrink:0;" />
+            <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(c.displayName)}</strong>
+            ${dot}
           </div>
         </div>
       `;

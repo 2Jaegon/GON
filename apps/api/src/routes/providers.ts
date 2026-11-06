@@ -82,29 +82,11 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
     return { subscription };
   });
 
-  // Register BYOK API Key
-  server.post("/api/v1/workspaces/:workspaceId/connections/api-key", async (req, reply) => {
-    const { workspaceId } = req.params as { workspaceId: string };
-    const dto = RegisterApiKeyDTOSchema.parse(req.body);
-
-    redactSecrets(dto.apiKey);
-
-    const connection: ProviderConnectionView = {
-      id: crypto.randomUUID(),
-      provider: dto.provider,
-      mode: "USER_API_KEY",
-      status: "connected",
-      displayName: dto.displayName || `${dto.provider.toUpperCase()} (BYOK API Key)`,
-      capabilities: ["plan", "code", "review", "tools", "structured_output"],
-      billingOwner: "user",
-      estimatedCostVisible: true,
-      legalGate: "approved",
-      lastHealthCheckAt: new Date().toISOString(),
-      details: "Configured via user API key"
-    };
-
-    await db.providers.create(connection);
-    return reply.status(201).send(connection);
+  // Register BYOK API Key (Not implemented)
+  server.post("/api/v1/workspaces/:workspaceId/connections/api-key", async (_req, reply) => {
+    return reply.status(501).send({
+      error: { code: "NOT_IMPLEMENTED", message: "API 키 연결은 준비 중이에요" }
+    });
   });
 
   // Health check for a provider connection
