@@ -8,34 +8,10 @@ import { CliRunner, SubscriptionDetector } from "@aso/provider-adapters";
 export async function providerRoutes(server: FastifyInstance, options: { db: IDatabase; cliRunner?: CliRunner }) {
   const { db } = options;
   const detector = new SubscriptionDetector(options.cliRunner);
+  let initialSyncDone = false;
 
-  // Helper to ensure default local subscriptions are synced
-  async function syncLocalSubscriptions(workspaceId: string): Promise<ProviderConnectionView[]> {
-    const existing = await db.providers.listForWorkspace(workspaceId);
-    const hasLocalNative = existing.some((c) => c.mode === "LOCAL_NATIVE_CLI");
-
-    if (!hasLocalNative) {
-      const detected = await detector.scanSubscriptions(workspaceId);
-      for (const d of detected) {
-        if (d.installed) {
-          await db.providers.create(d.connectionView);
-        }
-      }
-      return db.providers.listForWorkspace(workspaceId);
-    }
-    return existing;
-  }
-
-  // List connections (with auto-sync of local user subscriptions)
-  server.get("/api/v1/workspaces/:workspaceId/connections", async (req) => {
-    const { workspaceId } = req.params as { workspaceId: string };
-    const connections = await syncLocalSubscriptions(workspaceId);
-    return { items: connections };
-  });
-
-  // Explicitly detect/refresh local user subscriptions (Claude, Antigravity/Gemini, Codex)
-  server.post("/api/v1/workspaces/:workspaceId/connections/detect-subscriptions", async (req) => {
-    const { workspaceId } = req.params as { workspaceId: string };
+  async function applyDetectedSubscriptions(workspaceId: string) {
+    initialSyncDone = true;
     const detected = await detector.scanSubscriptions(workspaceId);
     for (const d of detected) {
       if (d.installed) {
@@ -52,6 +28,32 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
         }
       }
     }
+    return detected;
+  }
+
+  // Helper to ensure default local subscriptions are synced
+  async function syncLocalSubscriptions(workspaceId: string): Promise<ProviderConnectionView[]> {
+    const existing = await db.providers.listForWorkspace(workspaceId);
+    const hasLocalNative = existing.some((c) => c.mode === "LOCAL_NATIVE_CLI");
+
+    if (!hasLocalNative || !initialSyncDone) {
+      await applyDetectedSubscriptions(workspaceId);
+      return db.providers.listForWorkspace(workspaceId);
+    }
+    return existing;
+  }
+
+  // List connections (with auto-sync of local user subscriptions)
+  server.get("/api/v1/workspaces/:workspaceId/connections", async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const connections = await syncLocalSubscriptions(workspaceId);
+    return { items: connections };
+  });
+
+  // Explicitly detect/refresh local user subscriptions (Claude, Antigravity/Gemini, Codex)
+  server.post("/api/v1/workspaces/:workspaceId/connections/detect-subscriptions", async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const detected = await applyDetectedSubscriptions(workspaceId);
     const connections = await db.providers.listForWorkspace(workspaceId);
     return {
       items: connections,
@@ -97,6 +99,7 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
 
     const result = await detector.loginSubscription(provider);
     const detected = await detector.scanSubscriptions(workspaceId);
+    const isNowAuthed = result.authenticated !== undefined ? result.authenticated : (result.success && !result.pending);
     for (const d of detected) {
       if (d.installed) {
         const existing = await db.providers.findById(d.connectionView.id);
@@ -104,8 +107,8 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
           await db.providers.create(d.connectionView);
         } else {
           const isTarget = d.provider === provider;
-          const nextStatus = isTarget && result.success
-            ? "connected"
+          const nextStatus = isTarget
+            ? (isNowAuthed ? "connected" : d.connectionView.status)
             : (existing.metadata?.userDisconnected ? "needs_action" : d.connectionView.status);
           await db.providers.updateStatus(d.connectionView.id, nextStatus);
           await db.providers.updateMetadata(d.connectionView.id, {
@@ -127,7 +130,9 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
 
     return {
       success: true,
-      authenticated: true,
+      authenticated: Boolean(isNowAuthed),
+      pending: Boolean(result.pending),
+      authUrl: result.authUrl,
       message: result.message,
       items
     };

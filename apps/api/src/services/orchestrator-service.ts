@@ -33,9 +33,21 @@ export class OrchestratorService {
     if (!folder || !ctx.cwd || path.resolve(folder) !== path.resolve(ctx.cwd)) {
       throw new Error("작업 폴더를 먼저 골라 주세요");
     }
+    let resolvedModel = ctx.model ?? undefined;
+    if (connection.provider === "google" && resolvedModel && ctx.effort) {
+      const baseMatch = resolvedModel.match(/^(.*)-(low|medium|high)$/i);
+      if (baseMatch) {
+        const candidate = `${baseMatch[1]}-${ctx.effort}`;
+        const offeredModels = (connection.metadata?.models as any)?.models;
+        if (Array.isArray(offeredModels) && offeredModels.some((m: any) => m.id === candidate)) {
+          resolvedModel = candidate;
+        }
+      }
+    }
+
     return {
       provider: this.providerRegistry.forConnection(connection.provider),
-      model: ctx.model ?? undefined,
+      model: resolvedModel,
       effort: ctx.effort ?? undefined,
       cwd: ctx.cwd ?? undefined
     };

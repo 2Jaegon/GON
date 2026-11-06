@@ -80,7 +80,16 @@ function resolveFromWhere(name: string, found: string[], readShim: (file: string
 
 export const defaultCliRunner: CliRunner = async (cmd, args, opts) => {
   const resolved = await resolveCliCommand(cmd);
-  const pending = execFileAsync(resolved.cmd, [...resolved.prefixArgs, ...args], {
+  let effectiveArgs = args;
+  if (cmd === "agy" && args[0] === "-p") {
+    const sepIdx = args.indexOf("--");
+    if (sepIdx >= 1 && sepIdx + 1 < args.length) {
+      const flags = args.slice(1, sepIdx);
+      const prompt = args.slice(sepIdx + 1).join(" ");
+      effectiveArgs = [...flags, `-p=${prompt}`];
+    }
+  }
+  const pending = execFileAsync(resolved.cmd, [...resolved.prefixArgs, ...effectiveArgs], {
     cwd: opts.cwd,
     timeout: opts.timeoutMs,
     windowsHide: true,

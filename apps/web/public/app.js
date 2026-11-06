@@ -922,19 +922,70 @@ function selectedConnection() {
 }
 
 function defaultEffort(conn) {
-  const efforts = conn.efforts || [];
-  return efforts.includes("medium") ? "medium" : efforts[0] || null;
+  const efforts = (conn && conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
+  return efforts.includes("medium") ? "medium" : efforts[0] || "medium";
+}
+
+function getModelBaseId(modelId) {
+  if (!modelId) return "";
+  return String(modelId).replace(/-(low|medium|high)$/i, "");
+}
+
+function cleanModelLabel(label) {
+  if (!label) return "";
+  return String(label).replace(/\s*\((Low|Medium|High)\)\s*$/i, "").trim();
+}
+
+function resolveModelIdForEffort(conn, modelId, effort) {
+  if (!conn || !Array.isArray(conn.models) || !modelId) return modelId;
+  if (!effort) return modelId;
+  const baseId = getModelBaseId(modelId);
+  const candidate = `${baseId}-${effort}`;
+  const found = conn.models.find((m) => m.id === candidate);
+  if (found) return found.id;
+  const exact = conn.models.find((m) => m.id === modelId);
+  if (exact) return exact.id;
+  const anyVariant = conn.models.find((m) => getModelBaseId(m.id) === baseId);
+  return anyVariant ? anyVariant.id : modelId;
+}
+
+function deduplicateConnectionModels(conn) {
+  if (!conn || !Array.isArray(conn.models)) return [];
+  if (conn.provider !== "google") return conn.models;
+  const seenBases = new Map();
+  for (const m of conn.models) {
+    const baseId = getModelBaseId(m.id);
+    if (!seenBases.has(baseId)) {
+      seenBases.set(baseId, {
+        id: m.id,
+        baseId,
+        label: cleanModelLabel(m.label)
+      });
+    } else if (/-medium$/i.test(m.id)) {
+      seenBases.set(baseId, {
+        id: m.id,
+        baseId,
+        label: cleanModelLabel(m.label)
+      });
+    }
+  }
+  return Array.from(seenBases.values());
 }
 
 // Keep the saved selection if it is still offered; otherwise fall back to the first model.
 function normalizeModelSelection(saved) {
-  const conn = saved && modelCatalog.find((c) => c.connectionId === saved.connectionId && c.models.some((m) => m.id === saved.model));
+  const conn = saved && modelCatalog.find((c) => c.connectionId === saved.connectionId && c.models.some((m) => m.id === saved.model || getModelBaseId(m.id) === getModelBaseId(saved.model)));
   if (conn) {
-    const effort = (conn.efforts || []).includes(saved.effort) ? saved.effort : defaultEffort(conn);
-    return { connectionId: conn.connectionId, model: saved.model, effort };
+    const efforts = (conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
+    const effort = efforts.includes(saved.effort) ? saved.effort : defaultEffort(conn);
+    const resolvedModel = resolveModelIdForEffort(conn, saved.model, effort);
+    return { connectionId: conn.connectionId, model: resolvedModel, effort };
   }
   const first = modelCatalog.find((c) => c.models.length > 0);
-  return first ? { connectionId: first.connectionId, model: first.models[0].id, effort: defaultEffort(first) } : null;
+  if (!first) return null;
+  const effort = defaultEffort(first);
+  const resolvedModel = resolveModelIdForEffort(first, first.models[0].id, effort);
+  return { connectionId: first.connectionId, model: resolvedModel, effort };
 }
 
 let modelCatalogLoadError = false;
@@ -995,12 +1046,13 @@ function renderModelPicker() {
     if (!model) {
       labelEl.textContent = "모델 선택";
     } else {
-      const effort = modelSelection.effort ? ` ${EFFORT_LABELS[modelSelection.effort] || ""}` : "";
-      labelEl.textContent = `${model.label}${effort}`;
+      const cleanName = conn.provider === "google" ? cleanModelLabel(model.label) : model.label;
+      const effort = modelSelection.effort ? ` · ${EFFORT_LABELS[modelSelection.effort] || modelSelection.effort}` : "";
+      labelEl.textContent = `${cleanName}${effort}`;
     }
   }
 
-  const efforts = conn ? conn.efforts || [] : [];
+  const efforts = conn ? ((conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"]) : [];
   const effortRow = document.getElementById("popover-effort-row");
   if (effortRow) {
     effortRow.classList.toggle("hidden", efforts.length === 0);
@@ -1010,6 +1062,15 @@ function renderModelPicker() {
     btn.classList.toggle("hidden", !efforts.includes(btn.dataset.effort));
     btn.classList.toggle("active", !!modelSelection && btn.dataset.effort === modelSelection.effort);
   });
+
+  const composerEffortWrap = document.getElementById("composer-effort-wrapper");
+  const composerEffortSelect = document.getElementById("composer-effort-select");
+  if (composerEffortWrap) {
+    composerEffortWrap.classList.toggle("hidden", !conn || efforts.length === 0);
+  }
+  if (composerEffortSelect && modelSelection && modelSelection.effort) {
+    composerEffortSelect.value = modelSelection.effort;
+  }
 
   const list = document.getElementById("popover-model-list");
   if (!list) return;
@@ -1029,12 +1090,15 @@ function renderModelPicker() {
     }
     return;
   }
-  list.innerHTML = `<li class="popover-section-title">구독</li>` + modelCatalog.map((c) => {
+  list.innerHTML = `<li class="popover-section-title">구독 AI 서비스 및 모델</li>` + modelCatalog.map((c) => {
     const brand = aiBrand(c.provider);
     const plan = c.planVerified && c.plan ? c.plan.toUpperCase() : (c.planVerified ? "구독 연결됨" : "구독");
     const logo = brand.logo ? `<img src="${brand.logo}" alt="" width="16" height="16">` : "";
-    const items = c.models.map((m) => {
-      const active = modelSelection && modelSelection.connectionId === c.connectionId && modelSelection.model === m.id;
+    const displayModels = deduplicateConnectionModels(c);
+    const items = displayModels.map((m) => {
+      const active = modelSelection &&
+        modelSelection.connectionId === c.connectionId &&
+        (modelSelection.model === m.id || (c.provider === "google" && getModelBaseId(modelSelection.model) === getModelBaseId(m.id)));
       return `
         <li class="popover-model-item${active ? " active" : ""}" data-connection-id="${escapeHtml(c.connectionId)}" data-model-id="${escapeHtml(m.id)}">
           <div class="model-meta"><span class="model-name">${escapeHtml(m.label)}</span></div>
@@ -1042,7 +1106,7 @@ function renderModelPicker() {
         </li>`;
     }).join("");
     return `
-      <li class="popover-provider-head">${logo}<span class="popover-provider-name">${escapeHtml(c.displayName)}</span><span class="popover-provider-plan">${escapeHtml(plan)}</span></li>${items}`;
+      <li class="popover-provider-head">${logo}<span class="popover-provider-name">${escapeHtml(cleanServiceTitle(c.provider, c.displayName))}</span><span class="popover-provider-plan">${escapeHtml(plan)}</span></li>${items}`;
   }).join("");
 }
 
@@ -1074,7 +1138,11 @@ function toggleModelPickerPopover(e) {
 
 function selectModelEffort(effort) {
   if (!modelSelection) return;
+  const conn = selectedConnection();
   modelSelection.effort = effort;
+  if (conn) {
+    modelSelection.model = resolveModelIdForEffort(conn, modelSelection.model, effort);
+  }
   saveModelSelection();
   renderModelPicker();
 }
@@ -1082,8 +1150,11 @@ function selectModelEffort(effort) {
 function selectModelItem(connectionId, modelId) {
   const conn = modelCatalog.find((c) => c.connectionId === connectionId);
   if (!conn) return;
+  const efforts = (conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
   const current = modelSelection && modelSelection.effort;
-  modelSelection = { connectionId, model: modelId, effort: (conn.efforts || []).includes(current) ? current : defaultEffort(conn) };
+  const nextEffort = efforts.includes(current) ? current : defaultEffort(conn);
+  const resolvedModel = resolveModelIdForEffort(conn, modelId, nextEffort);
+  modelSelection = { connectionId, model: resolvedModel, effort: nextEffort };
   saveModelSelection();
   renderModelPicker();
   closeModelPickerPopover();
@@ -3213,9 +3284,8 @@ async function loginSubscriptionProvider(provider) {
   const origText = btn ? btn.textContent : "";
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "브라우저 로그인 대기 중…";
+    btn.textContent = "연결 확인 중…";
   }
-  showToast("브라우저 로그인 창을 확인하여 인증을 완료해 주세요", "info");
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${encodeURIComponent(provider)}/login`, {
       method: "POST"
@@ -3223,7 +3293,17 @@ async function loginSubscriptionProvider(provider) {
     const data = await res.json().catch(() => ({}));
     await loadConnections();
     await loadModelCatalog();
-    if (res.ok && (data.success || data.authenticated)) {
+
+    if (res.ok && data.pending && data.authUrl) {
+      try {
+        window.open(data.authUrl, "_blank", "noopener,noreferrer");
+      } catch {}
+      showToast(data.message || "브라우저에서 로그인 창을 열었어요. 인증 완료 시 자동으로 연결돼요.", "info");
+      pollSubscriptionLoginCompletion(provider);
+      return;
+    }
+
+    if (res.ok && (data.authenticated || data.success)) {
       showToast(data.message || "AI 서비스 계정이 성공적으로 연결되었어요!", "success");
     } else {
       showToast(data.message || data.error?.message || "로그인을 완료하지 못했어요", "error");
@@ -3236,6 +3316,39 @@ async function loginSubscriptionProvider(provider) {
       btn.textContent = origText;
     }
   }
+}
+
+let subscriptionPollTimer = null;
+
+function pollSubscriptionLoginCompletion(provider) {
+  if (subscriptionPollTimer) {
+    clearInterval(subscriptionPollTimer);
+    subscriptionPollTimer = null;
+  }
+  let attempts = 0;
+  subscriptionPollTimer = setInterval(async () => {
+    attempts += 1;
+    if (attempts > 25 || !currentWorkspaceId) {
+      clearInterval(subscriptionPollTimer);
+      subscriptionPollTimer = null;
+      return;
+    }
+    try {
+      const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/detect-subscriptions`, {
+        method: "POST"
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      const target = (data.items || []).find((c) => c.provider === provider);
+      if (target && target.status === "connected") {
+        clearInterval(subscriptionPollTimer);
+        subscriptionPollTimer = null;
+        await loadConnections();
+        await loadModelCatalog();
+        showToast(`${cleanServiceTitle(provider)} 계정이 연결되었어요!`, "success");
+      }
+    } catch {}
+  }, 3000);
 }
 
 async function logoutSubscriptionProvider(provider) {
