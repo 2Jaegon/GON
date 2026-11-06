@@ -943,16 +943,37 @@ const EFFORT_LABELS = {
   high: "High",
 };
 
+const LOGO_VERSION = "v=20261106-9";
+
 // usage.provider / connection provider -> AI display name + logo
 const AI_BRANDS = {
-  anthropic: { name: "Claude", logo: "/logos/anthropic.svg" },
-  google: { name: "Gemini", logo: "/logos/google.svg" },
-  antigravity: { name: "Gemini", logo: "/logos/google.svg" },
-  openai: { name: "Codex", logo: "/logos/openai.svg" },
+  anthropic: { name: "Claude", logo: `/logos/anthropic.svg?${LOGO_VERSION}` },
+  claude: { name: "Claude", logo: `/logos/anthropic.svg?${LOGO_VERSION}` },
+  google: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
+  antigravity: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
+  agy: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
+  gemini: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
+  openai: { name: "Codex", logo: `/logos/openai.svg?${LOGO_VERSION}` },
+  codex: { name: "Codex", logo: `/logos/openai.svg?${LOGO_VERSION}` },
 };
 
 function aiBrand(provider) {
   return AI_BRANDS[provider] || { name: "AI", logo: null };
+}
+
+function inferProviderFromRun(run) {
+  if (!run) return selectedConnection()?.provider || null;
+  const ctx = run.runContext || {};
+  if (ctx.provider && AI_BRANDS[ctx.provider]) return ctx.provider;
+  if (ctx.connectionId) {
+    const conn = modelCatalog.find((c) => c.connectionId === ctx.connectionId);
+    if (conn && conn.provider) return conn.provider;
+  }
+  const modelId = String(ctx.model || "").toLowerCase();
+  if (modelId.includes("claude")) return "anthropic";
+  if (modelId.includes("gemini") || modelId.includes("agy")) return "google";
+  if (modelId.includes("gpt") || modelId.includes("codex") || modelId.startsWith("o1") || modelId.startsWith("o3") || modelId.startsWith("o4")) return "openai";
+  return selectedConnection()?.provider || null;
 }
 
 // Avatar for an assistant answer; unknown providers (e.g. "mock") get a neutral icon.
@@ -3233,12 +3254,13 @@ async function renderTurnInThread(thread, run) {
   thread.appendChild(userRow);
 
   const isChat = run.executionMode === "chat" || isLikelyChat(reqText);
+  const initialProvider = inferProviderFromRun(run);
   const assistantTurn = document.createElement("div");
   assistantTurn.className = "assistant-turn";
   assistantTurn.id = `turn-${run.id}`;
   assistantTurn.innerHTML = `
     <div class="assistant-row">
-      ${assistantAvatarHtml(null)}
+      ${assistantAvatarHtml(initialProvider)}
       <div class="assistant-main">
         <div class="work-process-wrap ${isChat ? 'hidden' : ''}" id="process-wrap-${run.id}">
           <button type="button" class="work-process-toggle-btn" onclick="toggleWorkProcess('${run.id}')">
@@ -3535,7 +3557,7 @@ async function loadConnections() {
       return `
         <div class="content-card" ${isConnected ? defaultStyleAttr : cardClickAttr}>
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="28" height="28" style="border-radius:6px;flex-shrink:0;" />
+            <img src="${aiBrand(c.provider).logo || `/logos/${escapeHtml(c.provider)}.svg`}" alt="${escapeHtml(serviceTitle)}" width="32" height="32" style="border-radius:8px;flex-shrink:0;object-fit:contain;" />
             <div style="min-width:0;">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(serviceTitle)}</strong>

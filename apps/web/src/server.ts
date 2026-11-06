@@ -49,6 +49,10 @@ export async function createWebServer() {
     else if (ext === ".js") reply.type("application/javascript; charset=utf-8");
     else if (ext === ".json") reply.type("application/json; charset=utf-8");
     else if (ext === ".svg") reply.type("image/svg+xml");
+    else if (ext === ".png") reply.type("image/png");
+    else if (ext === ".jpg" || ext === ".jpeg") reply.type("image/jpeg");
+    else if (ext === ".webp") reply.type("image/webp");
+    else if (ext === ".ico") reply.type("image/x-icon");
 
     reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
     return reply.send(content);
