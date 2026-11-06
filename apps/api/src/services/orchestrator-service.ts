@@ -1,6 +1,6 @@
 import { IDatabase } from "@aso/database";
 import { IntentRefiner, TaskClassifier, DAGPlanner, SkillRouter } from "@aso/core";
-import { CliRunner, ProviderRegistry } from "@aso/provider-adapters";
+import { CliRunner, Effort, IProviderAdapter, ProviderRegistry } from "@aso/provider-adapters";
 import { Run, RunTask, RunEvent, CreateRunDTO, ExecutionMode } from "@aso/contracts";
 import { EventBus } from "./event-bus.js";
 
@@ -19,8 +19,24 @@ export class OrchestratorService {
     this.providerRegistry = new ProviderRegistry(cliRunner);
   }
 
-  private getProvider(preference?: string) {
-    return this.providerRegistry.resolve(preference);
+  /** The adapter plus model/effort/cwd for a run: the chosen connection when there is one, else the old auto pick. */
+  private async selectionFor(run: Run): Promise<{ provider: IProviderAdapter; model?: string; effort?: Effort; cwd?: string }> {
+    const ctx = run.runContext ?? {};
+    if (!ctx.connectionId) return { provider: this.providerRegistry.resolve(run.providerPreference) };
+
+    const connection = await this.db.providers.findById(ctx.connectionId);
+    if (!connection) throw new Error("선택한 연결을 찾을 수 없어요");
+    return {
+      provider: this.providerRegistry.forConnection(connection.provider),
+      model: ctx.model ?? undefined,
+      effort: ctx.effort ?? undefined,
+      cwd: ctx.cwd ?? undefined
+    };
+  }
+
+  private async failRun(runId: string, workspaceId: string, err: any): Promise<void> {
+    await this.db.runs.updateStatus(runId, "failed", { completedAt: new Date().toISOString() });
+    await this.emitEvent(workspaceId, runId, "run:failed", { error: err?.message || String(err) });
   }
 
   public async emitEvent(
@@ -52,13 +68,18 @@ export class OrchestratorService {
           confidence: classification.confidence
         });
 
-        const provider = this.getProvider(run.providerPreference);
+        const selection = await this.selectionFor(run);
+        const { provider } = selection;
         const chatResult = await (provider.executeChat
           ? provider.executeChat({
               runId,
               workspaceId,
               prompt: rawRequest,
-              model: run.providerPreference !== "auto" ? run.providerPreference : "gemini-3.8-flash-low",
+              model: run.runContext?.connectionId
+                ? selection.model
+                : run.providerPreference !== "auto" ? run.providerPreference : "gemini-3.8-flash-low",
+              effort: selection.effort,
+              cwd: selection.cwd,
               context: run.runContext
             })
           : this.providerRegistry.get("agy").executeChat!({
@@ -124,10 +145,9 @@ export class OrchestratorService {
       }
 
       // Otherwise proceed directly
-      await this.executePlan(runId, workspaceId, createdTasks, executionMode, run.providerPreference);
+      await this.executePlan(run, createdTasks, executionMode);
     } catch (err: any) {
-      await this.db.runs.updateStatus(runId, "failed", { completedAt: new Date().toISOString() });
-      await this.emitEvent(workspaceId, runId, "run:failed", { error: err?.message || String(err) });
+      await this.failRun(runId, workspaceId, err);
     }
   }
 
@@ -138,21 +158,22 @@ export class OrchestratorService {
     await this.db.plans.updateStatus(plan.id, "approved");
     await this.emitEvent(workspaceId, runId, "plan:approved", { planId: plan.id });
 
+    const run = await this.db.runs.findById(runId);
+    if (!run) throw new Error("Run not found");
     const tasks = await this.db.tasks.listByRunId(runId);
-    await this.executePlan(runId, workspaceId, tasks, "standard");
+    try {
+      await this.executePlan(run, tasks, "standard");
+    } catch (err: any) {
+      await this.failRun(runId, workspaceId, err);
+    }
   }
 
-  private async executePlan(
-    runId: string,
-    workspaceId: string,
-    tasks: RunTask[],
-    mode: ExecutionMode,
-    providerPreference?: string
-  ): Promise<void> {
+  private async executePlan(run: Run, tasks: RunTask[], mode: ExecutionMode): Promise<void> {
+    const { id: runId, workspaceId } = run;
     await this.db.runs.updateStatus(runId, "running");
     await this.emitEvent(workspaceId, runId, "run:executing", { tasksCount: tasks.length });
 
-    const provider = this.getProvider(providerPreference);
+    const { provider, model, effort, cwd } = await this.selectionFor(run);
 
     for (const task of tasks) {
       await this.db.tasks.updateState(task.id, "running");
@@ -169,6 +190,9 @@ export class OrchestratorService {
         runId,
         workspaceId,
         task,
+        model,
+        effort,
+        cwd,
         onEvent: async (evType, payload) => {
           await this.emitEvent(workspaceId, runId, evType, payload);
         }

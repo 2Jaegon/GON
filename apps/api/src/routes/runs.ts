@@ -1,8 +1,9 @@
 import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
-import { CreateRunDTOSchema } from "@aso/contracts";
+import { CreateRunDTOSchema, ConnectionModels } from "@aso/contracts";
 import { OrchestratorService } from "../services/orchestrator-service.js";
 import { EventBus } from "../services/event-bus.js";
+import { resolveActiveWorkspacePath } from "../services/workspace-path.js";
 
 export async function runRoutes(
   server: FastifyInstance,
@@ -32,6 +33,23 @@ export async function runRoutes(
     const dto = CreateRunDTOSchema.parse(req.body);
     const sessionId = dto.sessionId || crypto.randomUUID();
 
+    // A chosen connection must offer the model/effort and the workspace needs an active folder.
+    let cwd: string | null = null;
+    if (dto.connectionId) {
+      const fail = (code: string, message: string) => reply.status(400).send({ error: { code, message } });
+      const connection = (await db.providers.listForWorkspace(workspaceId)).find((c) => c.id === dto.connectionId);
+      if (!connection) return fail("CONNECTION_NOT_FOUND", "연결을 찾을 수 없어요");
+      const offered = connection.metadata?.models as ConnectionModels | undefined;
+      if (dto.model && !offered?.models.some((m) => m.id === dto.model)) {
+        return fail("MODEL_NOT_AVAILABLE", "이 구독에서 쓸 수 없는 모델이에요");
+      }
+      if (dto.effort && !offered?.efforts.includes(dto.effort)) {
+        return fail("EFFORT_NOT_SUPPORTED", "이 구독에서 쓸 수 없는 강도예요");
+      }
+      cwd = await resolveActiveWorkspacePath(db, workspaceId);
+      if (!cwd) return fail("NO_WORKSPACE_FOLDER", "작업 폴더를 먼저 골라 주세요");
+    }
+
     const run = await db.runs.create({
       workspaceId,
       projectId,
@@ -50,7 +68,11 @@ export async function runRoutes(
       runContext: {
         sessionId,
         attachments: dto.attachments || [],
-        workspacePath: dto.workspacePath || null
+        workspacePath: dto.workspacePath || null,
+        connectionId: dto.connectionId ?? null,
+        model: dto.model ?? null,
+        effort: dto.effort ?? null,
+        cwd
       }
     });
 

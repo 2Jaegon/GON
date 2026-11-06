@@ -51,7 +51,7 @@ export class ProviderRegistry {
       return this.mockProvider;
     }
 
-    if (pref === "claude" || pref === "anthropic" || pref.includes("sonnet") || pref.includes("claude-code")) {
+    if (pref === "claude" || pref === "anthropic") {
       return this.claudeProvider;
     }
 

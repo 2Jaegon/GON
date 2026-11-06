@@ -168,6 +168,9 @@ export const CreateRunDTOSchema = z.object({
   runtime: ExecutionRuntimeSchema.default("local"),
   executionMode: ExecutionModeSchema.default("auto"),
   providerPreference: z.string().default("auto"),
+  connectionId: z.string().uuid().optional(),
+  model: z.string().optional(),
+  effort: z.enum(["low", "medium", "high"]).optional(),
   budget: RunBudgetSchema.partial().optional(),
   attachments: z
     .array(
