@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Project Agent Guidance (Gon - Adaptive Skill Orchestrator)
 
 이 저장소는 **Gon(Adaptive Skill Orchestrator)** 프로젝트입니다.
@@ -13,17 +17,34 @@
 4. **ECC 전문화**: ECC는 보안, API 설계, DB 등 특정 기술 영역의 전문 지침(specialist)으로만 선별 편입하며, 전역 훅/메모리/오케스트레이터로 사용하지 않습니다.
 5. **검증 중심**: 실제로 실행되어 통과한 테스트만 pass로 보고하며, 미실행 항목은 unverified로 둡니다.
 6. **토큰 및 시간 계측**: 실측된 토큰과 시간만 기록하며, 측정 불가 시 `unknown`/`null`로 표기합니다(추측값 0 입력 금지).
-7. 세부 계약 및 아키텍처는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)와 [docs/ASO_SPEC.md](docs/ASO_SPEC.md)를 참조합니다.
+7. 세부 계약은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)(실제 따르는 계약: `events.jsonl` v2, `report.json`, CLI 명령·종료 코드), 설계 근거는 [docs/ASO_SPEC.md](docs/ASO_SPEC.md)를 참조합니다.
 
 ## Graphify 규칙
 - `graphify-out/graph.json`이 존재할 때 다중 모듈 간 의존성이나 구조적 질문이 있는 경우에만 `graphify query`를 활용합니다.
 - 단순/국소적 코드 수정에는 불필요하게 graphify를 호출하지 않습니다.
 
 ## 빠른 명령어
-- 빌드: `npm run build` (TypeScript 컴파일 -> cli/dist/)
-- 테스트: `npm test` (전체 106개 테스트) 또는 `npm run test:cli`, `npm run test:viewer`
-- 진단/동기화: `node cli/dist/cli.js doctor`, `node cli/dist/cli.js skills sync`
+- 빌드: `npm run build` — `packages/*` → `apps/*` → `cli` 순서로 `tsc` 실행(순서가 의존 관계). CLI만: `npm run build:cli`
+- 테스트: `npm test` = `test:viewer`(node:test, `tests/*.test.mjs`) + `vitest run`(`tests/cli`, `tests/aso-web`)
+  - 묶음별: `npm run test:viewer`, `npm run test:cli`, `npm run test:aso-web`
+  - 파일 하나: `npx vitest run tests/cli/router.test.ts` / `node --test tests/skill-lint.test.mjs`
+  - 이름으로: `npx vitest run -t "<테스트 이름>"`
+- vitest는 `@aso/*`를 `packages/*/src`로 alias하므로 테스트에는 빌드가 필요 없습니다. `node cli/dist/...`나 `npm start`는 빌드가 먼저 필요합니다.
+- 진단/동기화: `node cli/dist/cli.js doctor`, `node cli/dist/cli.js skills sync [--check]`
+- 웹앱 실행: `npm run dev` (API :4000 + Web :3000, `scripts/start-all.js`)
+
+## 구조 (두 갈래)
+1. **Gon 스킬팩** — 배포되는 Claude Code 플러그인(`.claude-plugin/marketplace.json`)
+   - `plugins/gon/skills/gon/`이 **정본**입니다. `SKILL.md` + `cards/`(refine·plan·approve·verify) + `references/`(fast·standard·deep·routing) + `tools/`(호스트별 차이).
+   - `.agents/skills/gon/`, `.claude/skills/gon/`은 `gon skills sync`가 만드는 **복사본**(SHA-256 검증). 직접 고치지 말고 정본을 고친 뒤 sync합니다.
+   - `plugins/gon/viewer/`: `.gon/<run_id>/events.jsonl`을 읽는 로컬 읽기 전용 그래프 뷰어. `events.mjs`의 `validateRun`이 기록 계약을 검증합니다.
+   - `tests/skill-lint.test.mjs`가 카드·레퍼런스 이름, frontmatter, 예시 실행 기록을 검사하므로 스킬 파일 구조를 바꾸면 이 테스트도 함께 맞춥니다.
+2. **`gon` CLI** (`cli/src`, 선택 도구) — `registry/`(스킬 탐색·카탈로그·충돌), `core/`(classifier·router), `observability/`(세션 로그 → 토큰·비용 `report.json`), `statusline.ts`. 정책·카탈로그·가격표 데이터는 `config/`에 있습니다.
+3. **ASO Web 앱** (npm workspaces 모노레포, 설계는 [docs/ASO_WEB_APP_SPEC.md](docs/ASO_WEB_APP_SPEC.md), 결정·가정은 [docs/DECISIONS.md](docs/DECISIONS.md))
+   - `packages/`: `contracts`(zod 스키마) → `security` → `database` → `aso-core` → `execution-protocol` → `provider-adapters`
+   - `apps/`: `api`(fastify), `web`, `worker`, `local-runner`(`aso-runner` bin)
+   - 로컬·테스트는 인메모리 저장소와 `MockProvider`로 동작하며, Postgres/Redis/MinIO(`infra/compose.yaml`)는 필수가 아닙니다.
 
 ## 코드 작성 원칙 (Ponytail + Karpathy)
 - 문제를 해결하는 가장 작고 단순한 diff를 작성하며, 요구받지 않은 불필요한 추상화·옵션(YAGNI)을 금지합니다.
-- `plugins/gon/`은 Node 내장 모듈만 사용하며(외부 의존성 0개), CLI 패키지는 `cli/`에만 둡니다.
+- `plugins/gon/`은 Node 내장 모듈만 사용합니다(외부 의존성 0개 — 플러그인 캐시에서는 `npm install`이 돌지 않음). CLI 패키지는 `cli/`에만 둡니다.
