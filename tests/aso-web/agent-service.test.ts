@@ -568,4 +568,153 @@ describe("AgentService", () => {
     expect(respEv.payload.text).toContain("이미지 첨부는 에이전트 경로에서 아직 지원하지 않아요\n");
     expect(respEv.payload.text).toContain("첨부 파일을 확인했습니다.");
   });
+
+  describe("Grilling Detection and Badge Events", () => {
+    it("emits agent:grilling { state: 'asking' } when response text starts with [Grilling] and strips marker from output", async () => {
+      const db = createDatabase(":memory:");
+      const eventBus = new EventBus();
+
+      const fakeRunner: AgentRunner = async (opts, onEvent) => {
+        onEvent({ kind: "text", delta: "[Grilling]\n1. 어떤 언어로 구현할까요?" });
+        return {
+          sessionId: "s1",
+          text: "[Grilling]\n1. 어떤 언어로 구현할까요?\n(추천: TypeScript)",
+          isError: false,
+          denials: [],
+          inputTokens: 5,
+          outputTokens: 5,
+          cachedInputTokens: 0,
+          costUsd: 0,
+          durationMs: 50
+        };
+      };
+
+      const service = new AgentService(db, eventBus, fakeRunner);
+      const run = await createMockRun(db, { rawRequest: "로그인 만들어줘" });
+
+      await service.start(run);
+
+      const events = await db.events.listForRun(run.id);
+      const grillEv = events.find((e: any) => e.eventType === "agent:grilling");
+      expect(grillEv).toBeDefined();
+      expect(grillEv.payload).toEqual({ state: "asking" });
+
+      const respEv = events.find((e: any) => e.eventType === "chat:response");
+      expect(respEv.payload.text).not.toContain("[Grilling]");
+      expect(respEv.payload.text).toContain("1. 어떤 언어로 구현할까요?");
+    });
+
+    it("emits agent:grilling { state: 'asking' } when Skill tool with /grill/i is invoked", async () => {
+      const db = createDatabase(":memory:");
+      const eventBus = new EventBus();
+
+      const fakeRunner: AgentRunner = async (opts, onEvent) => {
+        onEvent({
+          kind: "tool",
+          id: "call-1",
+          name: "Skill",
+          input: { skill: "mattpocock-skills:grilling", prompt: "refine" }
+        });
+        return {
+          sessionId: "s1",
+          text: "몇 가지 명확화 질문을 드릴게요.",
+          isError: false,
+          denials: [],
+          inputTokens: 5,
+          outputTokens: 5,
+          cachedInputTokens: 0,
+          costUsd: 0,
+          durationMs: 50
+        };
+      };
+
+      const service = new AgentService(db, eventBus, fakeRunner);
+      const run = await createMockRun(db, { rawRequest: "테스트 작성해줘" });
+
+      await service.start(run);
+
+      const events = await db.events.listForRun(run.id);
+      const grillEv = events.find((e: any) => e.eventType === "agent:grilling");
+      expect(grillEv).toBeDefined();
+      expect(grillEv.payload).toEqual({ state: "asking" });
+    });
+
+    it("does not emit agent:grilling for regular responses", async () => {
+      const db = createDatabase(":memory:");
+      const eventBus = new EventBus();
+
+      const fakeRunner: AgentRunner = async () => ({
+        sessionId: "s1",
+        text: "안녕하세요! 무엇을 도와드릴까요?",
+        isError: false,
+        denials: [],
+        inputTokens: 5,
+        outputTokens: 5,
+        cachedInputTokens: 0,
+        costUsd: 0,
+        durationMs: 50
+      });
+
+      const service = new AgentService(db, eventBus, fakeRunner);
+      const run = await createMockRun(db, { rawRequest: "안녕" });
+
+      await service.start(run);
+
+      const events = await db.events.listForRun(run.id);
+      expect(events.some((e: any) => e.eventType === "agent:grilling")).toBe(false);
+    });
+
+    it("emits agent:grilling { state: 'answered' } on subsequent run when previous run was in asking state", async () => {
+      const db = createDatabase(":memory:");
+      const eventBus = new EventBus();
+
+      let turn = 0;
+      const fakeRunner: AgentRunner = async (opts, onEvent) => {
+        turn++;
+        if (turn === 1) {
+          onEvent({ kind: "text", delta: "[Grilling]\n어떤 방식으로?" });
+          return {
+            sessionId: "s1",
+            text: "[Grilling]\n어떤 방식으로?",
+            isError: false,
+            denials: [],
+            inputTokens: 5,
+            outputTokens: 5,
+            cachedInputTokens: 0,
+            costUsd: 0,
+            durationMs: 50
+          };
+        }
+        return {
+          sessionId: "s1",
+          text: "요구사항이 정리되었으니 구현하겠습니다.",
+          isError: false,
+          denials: [],
+          inputTokens: 5,
+          outputTokens: 5,
+          cachedInputTokens: 0,
+          costUsd: 0,
+          durationMs: 50
+        };
+      };
+
+      const service = new AgentService(db, eventBus, fakeRunner);
+      const run1 = await createMockRun(db, {
+        rawRequest: "로그인 만들어줘",
+        runContext: { sessionId: "sess-grill", connectionId: "c1", cwd: "C:\\work" }
+      });
+      await service.start(run1);
+
+      const run2 = await createMockRun(db, {
+        rawRequest: "TypeScript로 만들어줘",
+        runContext: { sessionId: "sess-grill", connectionId: "c1", cwd: "C:\\work" }
+      });
+      await service.start(run2);
+
+      const events2 = await db.events.listForRun(run2.id);
+      const grillEv2 = events2.find((e: any) => e.eventType === "agent:grilling");
+      expect(grillEv2).toBeDefined();
+      expect(grillEv2.payload).toEqual({ state: "answered" });
+    });
+  });
 });

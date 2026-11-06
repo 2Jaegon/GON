@@ -112,6 +112,23 @@ export class AgentService {
     );
 
     const initialResumeId = await this.findResumeSessionId(run);
+
+    const sessionId = run.runContext?.sessionId;
+    if (sessionId) {
+      const priorRuns = await this.db.runs.listForProject(run.projectId);
+      const sortedPriors = priorRuns
+        .filter((r) => r.id !== run.id && r.runContext?.sessionId === sessionId && r.executionMode === "agent")
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      if (sortedPriors.length > 0) {
+        const events = await this.db.events.listForRun(sortedPriors[0].id);
+        const lastGrillEv = [...events].reverse().find((e) => e.eventType === "agent:grilling");
+        if (lastGrillEv?.payload?.state === "asking") {
+          await this.emitEvent(run.workspaceId, run.id, "agent:grilling", { state: "answered" });
+        }
+      }
+    }
+
     await this.runLoop(run, prompt, initialResumeId, undefined, hasImageAttachment, true);
   }
 
@@ -163,20 +180,45 @@ export class AgentService {
     const maxWallMs = (run.budget?.maxWallTimeSeconds ?? 1800) * 1000;
     let streamedText = "";
     let resumeFailedNotice = "";
+    let isGrilling = false;
+    let grillingAskingEmitted = false;
+
+    const stripGrillingMarker = (text: string) => text.replace(/^\s*\[Grilling\][^\n]*\n?/i, "");
+
+    const markGrillingAsking = async () => {
+      if (!grillingAskingEmitted) {
+        grillingAskingEmitted = true;
+        await this.emitEvent(run.workspaceId, run.id, "agent:grilling", { state: "asking" });
+      }
+    };
 
     const onEvent = async (ev: AgentEvent) => {
       if (ev.kind === "text") {
         streamedText += ev.delta;
+        if (!isGrilling && /^\s*\[Grilling\]/i.test(streamedText)) {
+          isGrilling = true;
+          await markGrillingAsking();
+        }
+        const cleanedText = isGrilling ? stripGrillingMarker(streamedText) : streamedText;
         this.eventBus.publish(run.id, {
           id: 0,
           workspaceId: run.workspaceId,
           runId: run.id,
           sequence: 0,
           eventType: "chat:delta",
-          payload: { delta: ev.delta, text: streamedText, provider: "anthropic" },
+          payload: { delta: ev.delta, text: cleanedText, provider: "anthropic" },
           recordedAt: new Date().toISOString()
         });
       } else if (ev.kind === "tool") {
+        if (
+          !isGrilling &&
+          ev.name === "Skill" &&
+          typeof (ev.input as any)?.skill === "string" &&
+          /grill/i.test((ev.input as any).skill)
+        ) {
+          isGrilling = true;
+          await markGrillingAsking();
+        }
         await this.emitEvent(run.workspaceId, run.id, "agent:tool", {
           id: ev.id,
           name: ev.name,
@@ -293,6 +335,13 @@ export class AgentService {
     await this.db.usage.record(usage);
 
     let finalOutput = result.text;
+    if (!isGrilling && /^\s*\[Grilling\]/i.test(finalOutput)) {
+      isGrilling = true;
+      await markGrillingAsking();
+    }
+    if (isGrilling) {
+      finalOutput = stripGrillingMarker(finalOutput);
+    }
     if (hasImageAttachment) {
       finalOutput = "이미지 첨부는 에이전트 경로에서 아직 지원하지 않아요\n" + finalOutput;
     }
