@@ -258,37 +258,13 @@ export class MemoryDatabase implements IDatabase {
   };
 
   public runners: IRunnerRepository = {
-    listForWorkspace: async (workspaceId) => {
-      const list = Array.from(this.runnersMap.values()).filter((r) => r.workspaceId === workspaceId);
-      for (const r of list) {
-        if (!r.allowedPaths || r.allowedPaths.length === 0) {
-          r.allowedPaths = [process.cwd()];
-        }
-        if (!r.activePath) {
-          r.activePath = r.allowedPaths[0];
-        }
-      }
-      return list;
-    },
+    listForWorkspace: async (workspaceId) =>
+      Array.from(this.runnersMap.values()).filter((r) => r.workspaceId === workspaceId),
     findById: async (id) => {
       const r = this.runnersMap.get(id);
       if (r) {
-        const cwdClean = process.cwd().replace(/\\+/g, "/");
-        if (!r.allowedPaths || r.allowedPaths.length === 0) {
-          r.allowedPaths = [cwdClean];
-        } else {
-          r.allowedPaths = Array.from(new Set(
-            r.allowedPaths
-              .map((p) => p.replace(/\\+/g, "/"))
-              .filter((p) => !p.includes("UsersaicamDesktop"))
-          ));
-          if (r.allowedPaths.length === 0) r.allowedPaths = [cwdClean];
-        }
-        if (!r.activePath || r.activePath.includes("UsersaicamDesktop")) {
-          r.activePath = r.allowedPaths[0];
-        } else {
-          r.activePath = r.activePath.replace(/\\+/g, "/");
-        }
+        r.allowedPaths = Array.from(new Set((r.allowedPaths ?? []).map((p) => p.replace(/\\+/g, "/"))));
+        if (r.activePath) r.activePath = r.activePath.replace(/\\+/g, "/");
       }
       return r || null;
     },
@@ -315,15 +291,14 @@ export class MemoryDatabase implements IDatabase {
       if (new Date(pairing.expiresAt).getTime() < Date.now()) throw new Error("Pairing code expired");
 
       pairing.consumedAt = new Date().toISOString();
-      const cwdClean = process.cwd().replace(/\\+/g, "/");
       const device: RunnerDevice = {
         id: crypto.randomUUID(),
         workspaceId: pairing.workspaceId,
         name: deviceName,
         publicKey,
         status: "online",
-        allowedPaths: [cwdClean],
-        activePath: cwdClean,
+        allowedPaths: [],
+        activePath: null,
         lastSeenAt: new Date().toISOString(),
         createdAt: new Date().toISOString()
       };

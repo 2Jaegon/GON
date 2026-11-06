@@ -150,45 +150,30 @@ export class ClaudeProvider implements IProviderAdapter {
       });
     }
 
-    let codeDiff = `@@ -0,0 +1,15 @@\n+// Implementation for ${task.title} (orchestrated by Claude Code)\n+export function ${task.taskKey.replace(/-/g, "_")}(): boolean {\n+  return true;\n+}\n`;
-    let outputText = `Task '${task.title}' processed successfully via Claude Code`;
-
+    const startTime = Date.now();
+    let parsed: any;
     try {
       const taskPrompt = `작업: ${task.title}\n요구역량: ${task.capabilityRequirements.join(", ")}\n코드 변경 요약을 2줄 이내로 제시해줘.`;
       const { stdout } = await this.run("claude", claudeArgs(taskPrompt, model, effort), { cwd, timeoutMs: 30000 });
-      const parsed = JSON.parse(stdout.trim());
-      if (parsed.result) {
-        outputText = parsed.result;
+      parsed = JSON.parse(stdout.trim());
+    } catch (err: any) {
+      // A rate-limited CLI exits non-zero but still prints its reason as JSON on stdout.
+      let reason: string | undefined;
+      try {
+        reason = JSON.parse(String(err?.stdout ?? "").trim()).result;
+      } catch {
+        // not json
       }
-    } catch {
-      // Fallback description
+      throw new ProviderCallError("Claude", reason || err?.message || String(err));
     }
-
-    const filesChanged = [
-      {
-        path: `src/features/${task.taskKey}.ts`,
-        diff: codeDiff
-      }
-    ];
-
-    if (onEvent) {
-      await onEvent("task:diff_generated", {
-        runId,
-        taskId: task.id,
-        files: filesChanged.map((f) => f.path)
-      });
-      await onEvent("task:test_completed", {
-        runId,
-        taskId: task.id,
-        results: {
-          passed: true,
-          total: 3,
-          passedCount: 3,
-          output: `✓ tests/${task.taskKey}.test.ts (Claude verified)`
-        }
-      });
+    if (parsed.is_error) {
+      throw new ProviderCallError("Claude", parsed.result || parsed.api_error || "알 수 없는 오류가 났어요.");
     }
+    const outputText = typeof parsed.result === "string" ? parsed.result.trim() : "";
+    if (!outputText) throw new ProviderCallError("Claude", "빈 응답이 돌아왔어요.");
 
+    // Tokens come from the CLI when it reports them; otherwise they are "not measured", never invented.
+    const measured = parsed.usage?.input_tokens != null || parsed.usage?.output_tokens != null;
     const usage = {
       workspaceId,
       runId,
@@ -196,30 +181,20 @@ export class ClaudeProvider implements IProviderAdapter {
       provider: "anthropic",
       model: model ?? null,
       connectionMode: "LOCAL_NATIVE_CLI" as const,
-      inputTokens: 1200,
-      outputTokens: 450,
-      cachedInputTokens: 0,
+      inputTokens: parsed.usage?.input_tokens ?? 0,
+      outputTokens: parsed.usage?.output_tokens ?? 0,
+      cachedInputTokens: parsed.usage?.cache_read_input_tokens ?? 0,
       cacheWriteTokens: 0,
-      durationMs: 1100,
-      measuredCostUsd: 0,
-      costConfidence: "measured" as const,
-      source: "claude-code-cli"
+      durationMs: Date.now() - startTime,
+      measuredCostUsd: measured ? 0 : null, // subscription: no API billing
+      costConfidence: measured ? ("measured" as const) : ("unavailable" as const),
+      source: measured ? "claude-code-cli" : "claude-code-cli (tokens not measured)"
     };
 
     if (onEvent) {
-      await onEvent("task:completed", {
-        runId,
-        taskId: task.id,
-        usage
-      });
+      await onEvent("task:completed", { runId, taskId: task.id, usage });
     }
 
-    return {
-      success: true,
-      output: outputText,
-      filesChanged,
-      testResults: { passed: true, total: 3, passedCount: 3, output: "All tests passed" },
-      usage
-    };
+    return { success: true, output: outputText, filesChanged: [], usage };
   }
 }

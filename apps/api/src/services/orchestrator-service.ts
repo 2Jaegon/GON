@@ -1,8 +1,10 @@
+import path from "node:path";
 import { IDatabase } from "@aso/database";
 import { IntentRefiner, TaskClassifier, DAGPlanner, SkillRouter } from "@aso/core";
 import { CliRunner, Effort, IProviderAdapter, ProviderRegistry } from "@aso/provider-adapters";
 import { Run, RunTask, RunEvent, CreateRunDTO, ExecutionMode } from "@aso/contracts";
 import { EventBus } from "./event-bus.js";
+import { resolveActiveWorkspacePath } from "./workspace-path.js";
 
 export class OrchestratorService {
   private classifier = new TaskClassifier();
@@ -26,6 +28,11 @@ export class OrchestratorService {
 
     const connection = await this.db.providers.findById(ctx.connectionId);
     if (!connection) throw new Error("선택한 연결을 찾을 수 없어요");
+    // The folder may have been revoked or removed since the run was created (e.g. while awaiting approval).
+    const folder = await resolveActiveWorkspacePath(this.db, run.workspaceId);
+    if (!folder || !ctx.cwd || path.resolve(folder) !== path.resolve(ctx.cwd)) {
+      throw new Error("작업 폴더를 먼저 골라 주세요");
+    }
     return {
       provider: this.providerRegistry.forConnection(connection.provider),
       model: ctx.model ?? undefined,

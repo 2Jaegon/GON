@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
-import { ClaudeProvider, resolveCliCommand } from "@aso/provider-adapters";
+import { ClaudeProvider, ProviderCallError, resolveCliCommand } from "@aso/provider-adapters";
 
 const RID = randomUUID();
 const WID = randomUUID();
+const TASK = { id: randomUUID(), taskKey: "t-1", title: "T", capabilityRequirements: ["code"] } as any;
 
 const CLAUDE_SHIM = `"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*`;
 const CODEX_SHIM = `endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*`;
@@ -87,6 +88,39 @@ describe("ClaudeProvider", () => {
     expect(calls[0].opts.cwd).toBe("C:\\proj");
     expect(r.output).toBe("done");
     expect(r.usage.model).toBe("sonnet");
+    // nothing was measured or changed, so nothing is invented
+    expect(r.filesChanged).toEqual([]);
+    expect(r.testResults).toBeUndefined();
+    expect(r.usage).toMatchObject({ inputTokens: 0, outputTokens: 0, measuredCostUsd: null, costConfidence: "unavailable" });
+  });
+
+  it("execute() reports measured tokens when the CLI gives them", async () => {
+    const p = new ClaudeProvider(async () => ({
+      stdout: '{"result":"ok","usage":{"input_tokens":7,"output_tokens":9,"cache_read_input_tokens":2}}',
+      stderr: ""
+    }));
+    const r = await p.execute({ runId: RID, workspaceId: WID, task: TASK });
+    expect(r.usage).toMatchObject({ inputTokens: 7, outputTokens: 9, cachedInputTokens: 2, costConfidence: "measured" });
+  });
+
+  it("execute() throws ProviderCallError instead of faking success", async () => {
+    const failing = new ClaudeProvider(async () => {
+      throw new Error("boom");
+    });
+    await expect(failing.execute({ runId: RID, workspaceId: WID, task: TASK })).rejects.toThrow("Claude 호출에 실패했어요: boom");
+
+    const empty = new ClaudeProvider(async () => ({ stdout: '{"result":""}', stderr: "" }));
+    await expect(empty.execute({ runId: RID, workspaceId: WID, task: TASK })).rejects.toBeInstanceOf(ProviderCallError);
+
+    const garbage = new ClaudeProvider(async () => ({ stdout: "not json", stderr: "" }));
+    await expect(garbage.execute({ runId: RID, workspaceId: WID, task: TASK })).rejects.toBeInstanceOf(ProviderCallError);
+
+    const limited = new ClaudeProvider(async () => {
+      const err: any = new Error("exit 1");
+      err.stdout = JSON.stringify({ is_error: true, api_error: "usage_limit_reached", result: "한도" });
+      throw err;
+    });
+    await expect(limited.execute({ runId: RID, workspaceId: WID, task: TASK })).rejects.toThrow("한도");
   });
 });
 

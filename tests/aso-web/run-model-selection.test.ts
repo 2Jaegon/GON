@@ -18,20 +18,21 @@ interface Call {
   opts?: { cwd?: string; timeoutMs?: number };
 }
 
-function recordingRunner(calls: Call[]): CliRunner {
+function recordingRunner(calls: Call[], failPrompt = false): CliRunner {
   return async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
     const key = [cmd, ...args].join(" ");
     if (key === "claude --version") return { stdout: "2.1.0 (Claude Code)", stderr: "" };
     if (key === "claude auth status") return { stdout: CLAUDE_AUTH, stderr: "" };
+    if (cmd === "claude" && args[0] === "-p" && failPrompt) throw new Error("claude crashed");
     if (cmd === "claude" && args[0] === "-p") return { stdout: CLAUDE_REPLY, stderr: "" };
     throw new Error(`unexpected cli call: ${key}`);
   };
 }
 
-async function setup(calls: Call[] = []) {
+async function setup(calls: Call[] = [], failPrompt = false) {
   const db = createDatabase(":memory:");
-  const { server } = await createApiServer({ db, logger: false, cliRunner: recordingRunner(calls) });
+  const { server } = await createApiServer({ db, logger: false, cliRunner: recordingRunner(calls, failPrompt) });
   const detect = await server.inject({ method: "POST", url: `/api/v1/workspaces/${WS}/connections/detect-subscriptions` });
   const claude = JSON.parse(detect.body).items.find((c: any) => c.provider === "anthropic");
   return { db, server, connectionId: claude.id as string };
@@ -156,9 +157,24 @@ describe("run with a selected subscription model", () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it("marks the run failed with run:failed when execution after approval throws", async () => {
-    const { db, server, connectionId } = await setup();
-    await pairRunnerWithFolder(server, tmpFolder());
+  it("requires a folder the user chose, not the server's own default, after pairing", async () => {
+    const { server, connectionId } = await setup();
+    const pair = await server.inject({ method: "POST", url: `/api/v1/workspaces/${WS}/runner-pairings` });
+    await server.inject({
+      method: "POST",
+      url: "/api/v1/runner/pairings/redeem",
+      payload: {
+        pairingCode: JSON.parse(pair.body).pairingCode,
+        deviceName: "test-pc",
+        publicKey: "-----BEGIN PUBLIC KEY-----abcdefgh-----END PUBLIC KEY-----"
+      }
+    });
+    const res = await postRun(server, { connectionId, model: "sonnet" });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error.code).toBe("NO_WORKSPACE_FOLDER");
+  });
+
+  async function awaitingApprovalRun(server: any, db: IDatabase, connectionId: string): Promise<string> {
     const res = await postRun(server, {
       connectionId,
       model: "sonnet",
@@ -168,15 +184,46 @@ describe("run with a selected subscription model", () => {
     expect(res.statusCode).toBe(201);
     const { runId } = JSON.parse(res.body);
     await waitForStatus(db, runId, ["awaiting_approval"]);
+    return runId;
+  }
 
-    await db.providers.delete(connectionId); // the saved connection disappears before approval
-
+  async function expectFailedWithEvent(server: any, db: IDatabase, runId: string) {
     await server.inject({ method: "POST", url: `/api/v1/workspaces/${WS}/runs/${runId}/plan/approve` });
     const run = await db.runs.findById(runId);
     expect(run?.status).toBe("failed");
     expect(run?.completedAt).toBeTruthy();
     const events = await db.events.listForRun(runId);
     expect(events.some((e) => e.eventType === "run:failed")).toBe(true);
+  }
+
+  it("marks the run failed with run:failed when the provider fails after approval", async () => {
+    const calls: Call[] = [];
+    const { db, server, connectionId } = await setup(calls, true);
+    await pairRunnerWithFolder(server, tmpFolder());
+    const runId = await awaitingApprovalRun(server, db, connectionId);
+
+    await expectFailedWithEvent(server, db, runId);
+    expect(calls.some((c) => c.cmd === "claude" && c.args[0] === "-p")).toBe(true);
+    const events = await db.events.listForRun(runId);
+    expect(events.find((e) => e.eventType === "run:failed")?.payload.error).toContain("Claude 호출에 실패했어요");
+  });
+
+  it("fails an approval-gated run whose folder was revoked in the meantime", async () => {
+    const calls: Call[] = [];
+    const { db, server, connectionId } = await setup(calls);
+    const folder = tmpFolder();
+    const deviceId = await pairRunnerWithFolder(server, folder);
+    const runId = await awaitingApprovalRun(server, db, connectionId);
+
+    const revoke = await server.inject({
+      method: "DELETE",
+      url: `/api/v1/workspaces/${WS}/runners/${deviceId}/paths`,
+      payload: { path: folder }
+    });
+    expect(revoke.statusCode).toBe(200);
+
+    await expectFailedWithEvent(server, db, runId);
+    expect(calls.some((c) => c.cmd === "claude" && c.args[0] === "-p")).toBe(false);
   });
 });
 
