@@ -87,6 +87,7 @@ export class MemoryDatabase implements IDatabase {
       if (Array.isArray(data.approvals)) this.approvalsMap = new Map(data.approvals);
       if (Array.isArray(data.artifacts)) this.artifactsMap = new Map(data.artifacts);
       if (Array.isArray(data.usage)) this.usageMap = new Map(data.usage);
+      if (Array.isArray(data.sessions)) this.sessionsMap = new Map(data.sessions);
     } catch {
       // ignore corrupt file
     }
@@ -114,7 +115,8 @@ export class MemoryDatabase implements IDatabase {
         events: Array.from(this.eventsMap.entries()),
         approvals: Array.from(this.approvalsMap.entries()),
         artifacts: Array.from(this.artifactsMap.entries()),
-        usage: Array.from(this.usageMap.entries())
+        usage: Array.from(this.usageMap.entries()),
+        sessions: Array.from(this.sessionsMap.entries())
       };
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8");
     } catch {
@@ -722,12 +724,14 @@ export class MemoryDatabase implements IDatabase {
   public sessions: ISessionRepository = {
     create: async (userId: string, tokenHash: string, expiresAt: string) => {
       this.sessionsMap.set(tokenHash, { userId, expiresAt });
+      this.saveToDisk();
     },
     findByTokenHash: async (h: string) => {
       return this.sessionsMap.get(h) || null;
     },
     delete: async (h: string) => {
       this.sessionsMap.delete(h);
+      this.saveToDisk();
     }
   };
 }

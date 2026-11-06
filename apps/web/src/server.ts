@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
 
 const PORT = parseInt(process.env.WEB_PORT || "3000", 10);
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 
 export async function createWebServer() {
   const server = Fastify({ logger: false });

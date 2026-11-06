@@ -3,10 +3,13 @@
 // Pure clean typography. No icons or emojis outside the sidebar navigation.
 // ==========================================================================
 
-const API_URL = "http://127.0.0.1:4000/api/v1";
+const API_HOST = (typeof window !== "undefined" && window.location && window.location.hostname)
+  ? window.location.hostname
+  : "127.0.0.1";
+const API_URL = `http://${API_HOST}:4000/api/v1`;
 
-let currentWorkspaceId = "";
-let currentProjectId = "";
+let currentWorkspaceId = "00000000-0000-7000-8000-000000000002";
+let currentProjectId = "00000000-0000-7000-8000-000000000003";
 let activeSessionId = null;
 let activeRunId = null;
 let activeEventSource = null;
@@ -2996,22 +2999,34 @@ async function loadConnections() {
 
 async function issuePairingCode() {
   if (!currentWorkspaceId) return;
-  const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
-    method: "POST"
-  });
-  if (res.ok) {
-    const data = await res.json();
-    document.getElementById("pairing-code-value").textContent = data.pairingCode;
-    document.getElementById("pairing-command-text").textContent = `aso-runner pair ${data.pairingCode}`;
-    document.getElementById("pairing-code-display").classList.remove("hidden");
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
+      method: "POST"
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const codeEl = document.getElementById("pairing-code-value");
+      const cmdEl = document.getElementById("pairing-command-text");
+      const boxEl = document.getElementById("pairing-code-display");
+      if (codeEl) codeEl.textContent = data.pairingCode;
+      if (cmdEl) cmdEl.textContent = `aso-runner pair ${data.pairingCode}`;
+      if (boxEl) boxEl.classList.remove("hidden");
+      showToast("페어링 코드가 생성되었어요: " + data.pairingCode, "success");
+    } else {
+      showToast("페어링 코드 생성에 실패했어요", "error");
+    }
+  } catch (err) {
+    showToast("페어링 코드 생성 오류: " + err.message, "error");
   }
 }
 
 function copyPairingCommand() {
-  const text = document.getElementById("pairing-command-text").textContent;
+  const el = document.getElementById("pairing-command-text");
+  if (!el) return;
+  const text = el.textContent || "";
   navigator.clipboard.writeText(text).then(() => {
-    alert("명령어가 클립보드에 복사되었습니다: " + text);
-  });
+    showToast("명령어를 복사했어요: " + text, "success");
+  }).catch(() => {});
 }
 
 async function loadRunners() {

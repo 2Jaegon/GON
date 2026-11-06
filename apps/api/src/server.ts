@@ -13,7 +13,14 @@ import { runnerRoutes, LocalFolderPickResult } from "./routes/runner.js";
 import { skillsRoutes } from "./routes/skills.js";
 import { authRoutes, AuthConfig } from "./auth/routes.js";
 import { GoogleIdentity } from "./auth/google.js";
-import { parseCookies, hashSessionToken, SESSION_COOKIE_NAME } from "./auth/session.js";
+import {
+  parseCookies,
+  hashSessionToken,
+  generateSessionToken,
+  buildSessionCookie,
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS
+} from "./auth/session.js";
 
 export const DEV_USER_ID = "00000000-0000-7000-8000-000000000001";
 export const DEV_WORKSPACE_ID = "00000000-0000-7000-8000-000000000002";
@@ -89,7 +96,16 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
 
   // CORS and Session Authentication Gate
   server.addHook("onRequest", async (req, reply) => {
-    reply.header("Access-Control-Allow-Origin", webOrigin);
+    const reqOrigin = req.headers.origin;
+    const allowedOrigins = new Set([
+      webOrigin,
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ]);
+    reply.header(
+      "Access-Control-Allow-Origin",
+      reqOrigin && allowedOrigins.has(reqOrigin) ? reqOrigin : webOrigin
+    );
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     reply.header("Access-Control-Allow-Headers", "Content-Type,Authorization,Idempotency-Key,Last-Event-ID,Cookie");
@@ -111,7 +127,21 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
 
       const cookies = parseCookies(req.headers.cookie);
       const token = cookies[SESSION_COOKIE_NAME];
+      const isLocalDevRuntime = process.env.NODE_ENV !== "test" && !options.auth;
+
       if (!token) {
+        if (isLocalDevRuntime && cookies["aso_logged_out"] !== "1") {
+          const fallbackUser = await db.users.findById(DEV_USER_ID);
+          if (fallbackUser) {
+            const rawToken = generateSessionToken();
+            const tokenHash = hashSessionToken(rawToken);
+            const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
+            await db.sessions.create(fallbackUser.id, tokenHash, expiresAt);
+            reply.header("Set-Cookie", buildSessionCookie(rawToken));
+            (req as any).user = fallbackUser;
+            return;
+          }
+        }
         return reply.status(401).send({
           error: { code: "UNAUTHENTICATED", message: "로그인이 필요해요" }
         });
@@ -120,6 +150,18 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
       const tokenHash = hashSessionToken(token);
       const session = await db.sessions.findByTokenHash(tokenHash);
       if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+        if (isLocalDevRuntime && cookies["aso_logged_out"] !== "1") {
+          const fallbackUser = await db.users.findById(DEV_USER_ID);
+          if (fallbackUser) {
+            const rawToken = generateSessionToken();
+            const newHash = hashSessionToken(rawToken);
+            const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
+            await db.sessions.create(fallbackUser.id, newHash, expiresAt);
+            reply.header("Set-Cookie", buildSessionCookie(rawToken));
+            (req as any).user = fallbackUser;
+            return;
+          }
+        }
         return reply.status(401).send({
           error: { code: "UNAUTHENTICATED", message: "세션이 만료되었거나 올바르지 않아요" }
         });
