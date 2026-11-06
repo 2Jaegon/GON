@@ -81,3 +81,4 @@ describe("Image Prompt Catalog & Loader", () => {
     expect(catalog.categories).toHaveLength(13);
   });
 });
+

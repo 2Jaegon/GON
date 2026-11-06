@@ -74,3 +74,4 @@
 ### Task 6: 전체 통합 검증 및 장부 정리
 - `npm run build`, `npm test` 전체 검증
 - 진행 장부 기록
+

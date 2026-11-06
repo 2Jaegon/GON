@@ -149,3 +149,4 @@ describe("Grilling Skip Option (skipGrilling DTO, API, and Agent Injection)", ()
     expect(capturedOpts!.appendSystemPrompt).toContain("[Grilling]");
   });
 });
+

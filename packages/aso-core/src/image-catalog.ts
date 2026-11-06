@@ -71,3 +71,4 @@ export function loadImageCatalog(filePath: string = DEFAULT_CATALOG_PATH): Image
   const parsedJson = JSON.parse(raw);
   return ImageCatalogSchema.parse(parsedJson);
 }
+
