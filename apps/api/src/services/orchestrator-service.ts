@@ -1,10 +1,11 @@
 import path from "node:path";
 import { IDatabase } from "@aso/database";
 import { IntentRefiner, TaskClassifier, DAGPlanner, SkillRouter } from "@aso/core";
-import { CliRunner, Effort, IProviderAdapter, ProviderRegistry } from "@aso/provider-adapters";
+import { CliRunner, Effort, IProviderAdapter, ProviderRegistry, AgentRunner } from "@aso/provider-adapters";
 import { Run, RunTask, RunEvent, CreateRunDTO, ExecutionMode } from "@aso/contracts";
 import { EventBus } from "./event-bus.js";
 import { resolveActiveWorkspacePath } from "./workspace-path.js";
+import { AgentService } from "./agent-service.js";
 
 export class OrchestratorService {
   private classifier = new TaskClassifier();
@@ -12,13 +13,16 @@ export class OrchestratorService {
   private planner = new DAGPlanner();
   private router = new SkillRouter();
   private providerRegistry: ProviderRegistry;
+  public readonly agent: AgentService;
 
   constructor(
     private db: IDatabase,
     private eventBus: EventBus,
-    cliRunner?: CliRunner
+    cliRunner?: CliRunner,
+    agentRunner?: AgentRunner
   ) {
     this.providerRegistry = new ProviderRegistry(cliRunner);
+    this.agent = new AgentService(this.db, this.eventBus, agentRunner);
   }
 
   /** The adapter plus model/effort/cwd for a run: the chosen connection when there is one, else the old auto pick. */
@@ -98,6 +102,10 @@ export class OrchestratorService {
   }
 
   public async startRun(run: Run, options?: CreateRunDTO["options"]): Promise<void> {
+    if (run.executionMode === "agent") {
+      return this.agent.start(run);
+    }
+
     const { id: runId, workspaceId, rawRequest } = run;
 
     try {
