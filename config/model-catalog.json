@@ -1,0 +1,21 @@
+{
+  "claude": {
+    "source": "https://code.claude.com/docs/en/model-config",
+    "checkedAt": "2026-11-06",
+    "models": [
+      { "id": "opus", "label": "Opus" },
+      { "id": "sonnet", "label": "Sonnet" },
+      { "id": "haiku", "label": "Haiku" }
+    ]
+  },
+  "codex": {
+    "source": "https://developers.openai.com/codex/models",
+    "checkedAt": "2026-11-06",
+    "models": [
+      { "id": "gpt-6-astra", "label": "Astra" },
+      { "id": "gpt-6.1-sol", "label": "6.1 Sol" },
+      { "id": "gpt-6.1-terra", "label": "6.1 Terra" },
+      { "id": "gpt-6-luna", "label": "6 Luna" }
+    ]
+  }
+}

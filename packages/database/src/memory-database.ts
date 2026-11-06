@@ -243,6 +243,13 @@ export class MemoryDatabase implements IDatabase {
       this.saveToDisk();
       return true;
     },
+    updateMetadata: async (id, metadata) => {
+      const p = this.providersMap.get(id);
+      if (!p) return false;
+      p.metadata = { ...p.metadata, ...metadata };
+      this.saveToDisk();
+      return true;
+    },
     delete: async (id) => {
       const res = this.providersMap.delete(id);
       this.saveToDisk();

@@ -1,4 +1,5 @@
 import Fastify, { FastifyInstance } from "fastify";
+import type { CliRunner } from "@aso/provider-adapters";
 import { IDatabase, createDatabase } from "@aso/database";
 import { EventBus } from "./services/event-bus.js";
 import { OrchestratorService } from "./services/orchestrator-service.js";
@@ -17,6 +18,7 @@ export const DEV_PROJECT_ID = "00000000-0000-7000-8000-000000000003";
 export interface ApiServerOptions {
   db?: IDatabase;
   logger?: boolean;
+  cliRunner?: CliRunner;
 }
 
 export async function createApiServer(options: ApiServerOptions = {}): Promise<{
@@ -30,7 +32,7 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
 
   const db = options.db || createDatabase();
   const eventBus = new EventBus();
-  const orchestrator = new OrchestratorService(db, eventBus);
+  const orchestrator = new OrchestratorService(db, eventBus, options.cliRunner);
   const runnerGateway = new RunnerGateway(db);
 
   // Seed default workspace and sample project for dev ease
@@ -83,7 +85,7 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
   await server.register(workspaceRoutes, { db });
   await server.register(projectRoutes, { db });
   await server.register(runRoutes, { db, orchestrator, eventBus });
-  await server.register(providerRoutes, { db });
+  await server.register(providerRoutes, { db, cliRunner: options.cliRunner });
   await server.register(runnerRoutes, { db, runnerGateway });
 
   // Attach WebSocket to server once ready

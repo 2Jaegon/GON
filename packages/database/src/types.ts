@@ -46,6 +46,7 @@ export interface IProviderRepository {
   findById(id: string): Promise<ProviderConnectionView | null>;
   create(view: ProviderConnectionView): Promise<ProviderConnectionView>;
   updateStatus(id: string, status: ProviderConnectionView["status"]): Promise<boolean>;
+  updateMetadata(id: string, metadata: Record<string, any>): Promise<boolean>;
   delete(id: string): Promise<boolean>;
 }
 

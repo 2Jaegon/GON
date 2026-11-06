@@ -60,3 +60,15 @@ export const RegisterApiKeyDTOSchema = z.object({
 });
 export type RegisterApiKeyDTO = z.infer<typeof RegisterApiKeyDTOSchema>;
 
+export const ModelOptionSchema = z.object({ id: z.string(), label: z.string() });
+export type ModelOption = z.infer<typeof ModelOptionSchema>;
+
+export const ConnectionModelsSchema = z.object({
+  plan: z.string().nullable(),
+  planVerified: z.boolean(),
+  efforts: z.array(z.enum(["low", "medium", "high"])),
+  models: z.array(ModelOptionSchema),
+  source: z.string(),
+  refreshedAt: z.string().datetime()
+});
+export type ConnectionModels = z.infer<typeof ConnectionModelsSchema>;

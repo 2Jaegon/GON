@@ -1,11 +1,9 @@
-import { exec } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { ProviderConnectionView } from "@aso/contracts";
-
-const execAsync = promisify(exec);
+import { CliRunner, defaultCliRunner } from "./cli-runner.js";
+import { ModelCatalog, discoverModels, loadModelCatalog } from "./model-discovery.js";
 
 export interface DetectedSubscription {
   provider: "anthropic" | "google" | "openai";
@@ -19,6 +17,15 @@ export interface DetectedSubscription {
 }
 
 export class SubscriptionDetector {
+  private catalog: ModelCatalog;
+
+  constructor(
+    private run: CliRunner = defaultCliRunner,
+    catalog?: ModelCatalog
+  ) {
+    this.catalog = catalog ?? loadModelCatalog();
+  }
+
   /**
    * Fast scan of local machine for installed user AI subscription CLIs (< 1s total)
    */
@@ -42,7 +49,7 @@ export class SubscriptionDetector {
     let status: ProviderConnectionView["status"] = "not_configured";
 
     try {
-      const { stdout } = await execAsync("claude --version", { timeout: 3000 });
+      const { stdout } = await this.run("claude", ["--version"], { timeoutMs: 3000 });
       if (stdout.trim()) {
         installed = true;
         version = stdout.trim().split("\n")[0];
@@ -51,6 +58,10 @@ export class SubscriptionDetector {
     } catch {
       // CLI not found
     }
+
+    const models = installed ? await discoverModels("anthropic", this.run, this.catalog) : undefined;
+    // A verified CLI login counts even when ~/.claude.json is absent.
+    if (installed && models?.planVerified) status = "connected";
 
     const id = "00000000-0000-7000-8000-c1a0de000001";
     return {
@@ -77,7 +88,8 @@ export class SubscriptionDetector {
         metadata: {
           cli: "claude",
           version,
-          hasConfig
+          hasConfig,
+          models
         }
       }
     };
@@ -93,7 +105,7 @@ export class SubscriptionDetector {
     let status: ProviderConnectionView["status"] = "not_configured";
 
     try {
-      const { stdout } = await execAsync("agy --version", { timeout: 3000 });
+      const { stdout } = await this.run("agy", ["--version"], { timeoutMs: 3000 });
       if (stdout.trim()) {
         installed = true;
         version = stdout.trim().split("\n")[0];
@@ -102,6 +114,8 @@ export class SubscriptionDetector {
     } catch {
       // agy not in path
     }
+
+    const models = installed ? await discoverModels("google", this.run, this.catalog) : undefined;
 
     const id = "00000000-0000-7000-8000-a64000000002";
     return {
@@ -128,7 +142,8 @@ export class SubscriptionDetector {
         metadata: {
           cli: "agy",
           version,
-          hasConfig
+          hasConfig,
+          models
         }
       }
     };
@@ -140,7 +155,7 @@ export class SubscriptionDetector {
     let status: ProviderConnectionView["status"] = "not_configured";
 
     try {
-      const { stdout } = await execAsync("codex --version", { timeout: 3000 });
+      const { stdout } = await this.run("codex", ["--version"], { timeoutMs: 3000 });
       if (stdout.trim()) {
         installed = true;
         version = stdout.trim().split("\n")[0];
@@ -149,6 +164,8 @@ export class SubscriptionDetector {
     } catch {
       // codex not found
     }
+
+    const models = installed ? await discoverModels("openai", this.run, this.catalog) : undefined;
 
     const id = "00000000-0000-7000-8000-c0de80000003";
     return {
@@ -173,7 +190,8 @@ export class SubscriptionDetector {
           : "Codex CLI is not installed",
         metadata: {
           cli: "codex",
-          version
+          version,
+          models
         }
       }
     };
@@ -189,8 +207,8 @@ export class SubscriptionDetector {
   }> {
     if (provider === "anthropic") {
       try {
-        const { stdout } = await execAsync('claude -p "ping" --output-format json < NUL', {
-          timeout: 6000
+        const { stdout } = await this.run("claude", ["-p", "ping", "--output-format", "json"], {
+          timeoutMs: 6000
         });
         const parsed = JSON.parse(stdout);
         if (parsed.api_error === "usage_limit_reached" || parsed.api_error_status === 429) {
@@ -226,7 +244,7 @@ export class SubscriptionDetector {
 
     if (provider === "google") {
       try {
-        await execAsync("agy --version", { timeout: 3000 });
+        await this.run("agy", ["--version"], { timeoutMs: 3000 });
         return { status: "connected", details: "Antigravity active and ready" };
       } catch {
         return { status: "not_configured", details: "agy CLI not found" };

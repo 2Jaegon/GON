@@ -3,11 +3,11 @@ import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
 import { RegisterApiKeyDTOSchema, ProviderConnectionView } from "@aso/contracts";
 import { redactSecrets } from "@aso/security";
-import { SubscriptionDetector } from "@aso/provider-adapters";
+import { CliRunner, SubscriptionDetector } from "@aso/provider-adapters";
 
-export async function providerRoutes(server: FastifyInstance, options: { db: IDatabase }) {
+export async function providerRoutes(server: FastifyInstance, options: { db: IDatabase; cliRunner?: CliRunner }) {
   const { db } = options;
-  const detector = new SubscriptionDetector();
+  const detector = new SubscriptionDetector(options.cliRunner);
 
   // Helper to ensure default local subscriptions are synced
   async function syncLocalSubscriptions(workspaceId: string): Promise<ProviderConnectionView[]> {
@@ -44,6 +44,7 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
           await db.providers.create(d.connectionView);
         } else {
           await db.providers.updateStatus(d.connectionView.id, d.connectionView.status);
+          await db.providers.updateMetadata(d.connectionView.id, { models: d.connectionView.metadata?.models });
         }
       }
     }
@@ -58,6 +59,27 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
         quotaWarning: d.quotaWarning
       }))
     };
+  });
+
+  // Models, plan and effort levels offered by each connected local subscription
+  server.get("/api/v1/workspaces/:workspaceId/models", async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const connections = await db.providers.listForWorkspace(workspaceId);
+    const subscription = connections
+      .filter((c) => c.mode === "LOCAL_NATIVE_CLI" && c.status === "connected")
+      .map((c) => {
+        const m = c.metadata?.models;
+        return {
+          connectionId: c.id,
+          provider: c.provider,
+          displayName: c.displayName,
+          plan: m?.plan ?? null,
+          planVerified: m?.planVerified ?? false,
+          efforts: m?.efforts ?? [],
+          models: m?.models ?? []
+        };
+      });
+    return { subscription };
   });
 
   // Register BYOK API Key

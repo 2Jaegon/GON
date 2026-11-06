@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { SubscriptionDetector, ProviderRegistry } from "@aso/provider-adapters";
+import { SubscriptionDetector, ProviderRegistry, CliRunner } from "@aso/provider-adapters";
 import { createApiServer } from "../../apps/api/src/server.js";
 import { createDatabase } from "@aso/database";
 
+const cliRunner: CliRunner = async (cmd, args) => {
+  if (args[0] === "--version") return { stdout: "1.0.0", stderr: "" };
+  throw new Error(`unexpected cli call: ${cmd} ${args.join(" ")}`);
+};
+
 describe("Subscription Connection & Provider Routing", () => {
   it("SubscriptionDetector scans and returns local subscription CLIs", async () => {
-    const detector = new SubscriptionDetector();
+    const detector = new SubscriptionDetector(cliRunner);
     const subs = await detector.scanSubscriptions("00000000-0000-7000-8000-000000000002");
 
     expect(Array.isArray(subs)).toBe(true);
@@ -40,7 +45,7 @@ describe("Subscription Connection & Provider Routing", () => {
 
   it("API automatically populates and returns local user subscriptions on /connections", async () => {
     const db = createDatabase(":memory:");
-    const { server } = await createApiServer({ db, logger: false });
+    const { server } = await createApiServer({ db, logger: false, cliRunner });
 
     const res = await server.inject({
       method: "GET",

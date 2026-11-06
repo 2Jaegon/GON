@@ -1,6 +1,6 @@
 import { IDatabase } from "@aso/database";
 import { IntentRefiner, TaskClassifier, DAGPlanner, SkillRouter } from "@aso/core";
-import { ProviderRegistry } from "@aso/provider-adapters";
+import { CliRunner, ProviderRegistry } from "@aso/provider-adapters";
 import { Run, RunTask, RunEvent, CreateRunDTO, ExecutionMode } from "@aso/contracts";
 import { EventBus } from "./event-bus.js";
 
@@ -9,12 +9,15 @@ export class OrchestratorService {
   private refiner = new IntentRefiner();
   private planner = new DAGPlanner();
   private router = new SkillRouter();
-  private providerRegistry = new ProviderRegistry();
+  private providerRegistry: ProviderRegistry;
 
   constructor(
     private db: IDatabase,
-    private eventBus: EventBus
-  ) {}
+    private eventBus: EventBus,
+    cliRunner?: CliRunner
+  ) {
+    this.providerRegistry = new ProviderRegistry(cliRunner);
+  }
 
   private getProvider(preference?: string) {
     return this.providerRegistry.resolve(preference);
