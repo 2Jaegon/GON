@@ -937,6 +937,9 @@ const EFFORT_LABELS = {
   low: "Low",
   medium: "Mid",
   high: "High",
+  xhigh: "XHigh",
+  max: "Max",
+  ultra: "Ultra",
 };
 
 const LOGO_VERSION = "v=20261106-10";
@@ -994,9 +997,17 @@ function selectedConnection() {
   return modelSelection ? modelCatalog.find((c) => c.connectionId === modelSelection.connectionId) : null;
 }
 
-function defaultEffort(conn) {
-  const efforts = (conn && conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
-  return efforts.includes("medium") ? "medium" : efforts[0] || "medium";
+// A model with its own levels (codex) narrows the connection levels; no levels means no effort is sent.
+function effortsFor(conn, modelId) {
+  if (!conn) return [];
+  const model = Array.isArray(conn.models) ? conn.models.find((m) => m.id === modelId) : null;
+  if (model && Array.isArray(model.efforts)) return model.efforts;
+  return Array.isArray(conn.efforts) ? conn.efforts : [];
+}
+
+function defaultEffort(conn, modelId) {
+  const efforts = effortsFor(conn, modelId);
+  return efforts.includes("medium") ? "medium" : efforts[0] || null;
 }
 
 function getModelBaseId(modelId) {
@@ -1049,14 +1060,14 @@ function deduplicateConnectionModels(conn) {
 function normalizeModelSelection(saved) {
   const conn = saved && modelCatalog.find((c) => c.connectionId === saved.connectionId && c.models.some((m) => m.id === saved.model || getModelBaseId(m.id) === getModelBaseId(saved.model)));
   if (conn) {
-    const efforts = (conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
-    const effort = efforts.includes(saved.effort) ? saved.effort : defaultEffort(conn);
+    const efforts = effortsFor(conn, saved.model);
+    const effort = efforts.includes(saved.effort) ? saved.effort : defaultEffort(conn, saved.model);
     const resolvedModel = resolveModelIdForEffort(conn, saved.model, effort);
     return { connectionId: conn.connectionId, model: resolvedModel, effort };
   }
   const first = modelCatalog.find((c) => c.models.length > 0);
   if (!first) return null;
-  const effort = defaultEffort(first);
+  const effort = defaultEffort(first, first.models[0].id);
   const resolvedModel = resolveModelIdForEffort(first, first.models[0].id, effort);
   return { connectionId: first.connectionId, model: resolvedModel, effort };
 }
@@ -1137,7 +1148,7 @@ function renderModelPicker() {
     }
   }
 
-  const efforts = conn ? ((conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"]) : [];
+  const efforts = conn && modelSelection ? effortsFor(conn, modelSelection.model) : [];
   const effortRow = document.getElementById("popover-effort-row");
   if (effortRow) {
     effortRow.classList.toggle("hidden", efforts.length === 0);
@@ -1168,7 +1179,8 @@ function renderModelPicker() {
   }
   list.innerHTML = `<li class="popover-section-title">구독 AI 서비스 및 모델</li>` + modelCatalog.map((c) => {
     const brand = aiBrand(c.provider);
-    const plan = c.planVerified && c.plan ? c.plan.toUpperCase() : (c.planVerified ? "구독 연결됨" : "구독");
+    // Only a plan the CLI reported is shown; agy reports none.
+    const plan = c.planVerified && c.plan ? c.plan.toUpperCase() : "플랜 확인 불가";
     const logo = brand.logo ? `<img src="${brand.logo}" alt="" width="16" height="16">` : "";
     const displayModels = deduplicateConnectionModels(c);
     const items = displayModels.map((m) => {
@@ -1227,9 +1239,9 @@ function selectModelEffort(effort) {
 function selectModelItem(connectionId, modelId) {
   const conn = modelCatalog.find((c) => c.connectionId === connectionId);
   if (!conn) return;
-  const efforts = (conn.efforts && conn.efforts.length > 0) ? conn.efforts : ["low", "medium", "high"];
+  const efforts = effortsFor(conn, modelId);
   const current = modelSelection && modelSelection.effort;
-  const nextEffort = efforts.includes(current) ? current : defaultEffort(conn);
+  const nextEffort = efforts.includes(current) ? current : defaultEffort(conn, modelId);
   const resolvedModel = resolveModelIdForEffort(conn, modelId, nextEffort);
   modelSelection = { connectionId, model: resolvedModel, effort: nextEffort };
   saveModelSelection();
@@ -2706,6 +2718,7 @@ async function submitChatPrompt() {
   `;
   thread.appendChild(assistantTurn);
   scrollChatToBottom();
+  if (isChat) startWaitingTicker(document.getElementById(`response-${tempId}`), aiBrand(chatProvider).name);
 
   // Ensure active session exists, or initialize a new one
   if (!activeSessionId) {
@@ -3075,8 +3088,23 @@ function copyCodeBlock(btn) {
 function setResponseText(runId, text) {
   const respEl = document.getElementById(`response-${runId}`);
   if (respEl) {
+    respEl.dataset.waiting = "";
     respEl.innerHTML = renderSafeMarkdown(text);
   }
+}
+
+// Shows how long the answer has been pending, so a slow answer can be told apart from a stuck one.
+// Stops by itself once any text replaces the placeholder (setResponseText) or the element leaves the page.
+function startWaitingTicker(respEl, name) {
+  if (!respEl || typeof window.waitingLabel !== "function") return;
+  const startedAt = Date.now();
+  respEl.dataset.waiting = "1";
+  const tick = () => {
+    if (!respEl.isConnected || respEl.dataset.waiting !== "1") return clearInterval(timer);
+    respEl.textContent = window.waitingLabel(name, (Date.now() - startedAt) / 1000);
+  };
+  const timer = setInterval(tick, 1000);
+  tick();
 }
 
 function renderRequirementsInTurn(runId, reqs) {
@@ -3551,7 +3579,7 @@ async function loadConnections() {
         : `<span class="badge badge-sub" style="color:#f59e0b;border-color:rgba(245,158,11,0.4);">로그인 필요</span>`;
 
       const subtitle = isConnected
-        ? `${modelCount > 0 ? `${modelCount}개 모델 사용 가능 · ` : ""}구독 계정 연결됨`
+        ? `${modelCount > 0 ? `${modelCount}개 모델 사용 가능 · ` : ""}${c.details || "계정 연결됨"}`
         : "클릭하여 로그인 화면으로 이동하고 구독 계정을 연결하세요";
 
       const actionButtons = isConnected
