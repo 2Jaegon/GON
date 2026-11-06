@@ -155,7 +155,8 @@ export class ClaudeProvider implements IProviderAdapter {
     let parsed: any;
     try {
       const taskPrompt = `작업: ${task.title}\n요구역량: ${task.capabilityRequirements.join(", ")}\n코드 변경 요약을 2줄 이내로 제시해줘.`;
-      const { stdout } = await this.run("claude", claudeArgs(taskPrompt, model, effort), { cwd, timeoutMs: 30000 });
+      // Tasks run in the project folder with its hooks and rules; 30s killed real sonnet/high runs (2026-11-06).
+      const { stdout } = await this.run("claude", claudeArgs(taskPrompt, model, effort), { cwd, timeoutMs: 120000 });
       parsed = JSON.parse(stdout.trim());
     } catch (err: any) {
       // A rate-limited CLI exits non-zero but still prints its reason as JSON on stdout.

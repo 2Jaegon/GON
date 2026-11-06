@@ -86,6 +86,8 @@ describe("ClaudeProvider", () => {
     expect(calls[0].cmd).toBe("claude");
     expect(calls[0].args.slice(0, -1)).toEqual(["-p", "--output-format", "json", "--model", "sonnet", "--effort", "low", "--"]);
     expect(calls[0].opts.cwd).toBe("C:\\proj");
+    // a task runs in the project folder with its hooks and rules; 30s killed real sonnet/high runs
+    expect(calls[0].opts.timeoutMs).toBe(120000);
     expect(r.output).toBe("done");
     expect(r.usage.model).toBe("sonnet");
     // nothing was measured or changed, so nothing is invented

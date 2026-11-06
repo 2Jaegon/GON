@@ -219,6 +219,29 @@ process.once("exit", () => {
   warmAgyPool.clear();
 });
 
+/**
+ * An empty answer with `denied_actions` means headless mode auto-denied a tool the model wanted (e.g. a global
+ * GEMINI.md telling it to read a file). Say so instead of a bare "empty answer".
+ */
+export function agyResultError(result: { response?: unknown; denied_actions?: Array<{ action?: string }> }): string | null {
+  const answered = typeof result.response === "string" && result.response.trim() !== "";
+  const denied = (result.denied_actions ?? []).map((d) => d?.action).filter((a): a is string => typeof a === "string" && a !== "");
+  if (answered || denied.length === 0) return null;
+  const readsFile = denied.some((a) => /read_file|view_file/.test(a));
+  const hint = readsFile
+    ? "~/.gemini/GEMINI.md 같은 전역 규칙이 파일 읽기를 시키는지 확인해 주세요."
+    : "전역 규칙이나 지침이 이 도구를 쓰라고 시키는지 확인해 주세요.";
+  return `Gemini가 권한이 필요한 도구(${denied.join(", ")})를 쓰려다 막혀서 답을 만들지 못했어요. ${hint}`;
+}
+
+/** Only claims the answer was arriving when some text had streamed; otherwise it may be a slow boot or no connection. */
+export function agyTimeoutMessage(timeoutMs: number, gotOutput: boolean): string {
+  const sec = Math.round(timeoutMs / 1000);
+  return gotOutput
+    ? `${sec}초 안에 답이 끝나지 않았어요(시간 초과). 답은 오고 있었지만 너무 길거나 느려요.`
+    : `${sec}초 안에 답이 오지 않았어요(시간 초과). 시작이 늦거나 연결이 안 됐을 수 있어요.`;
+}
+
 async function runAgyFastStream(
   exePath: string,
   model: string | undefined,
@@ -249,7 +272,7 @@ async function runAgyFastStream(
       if (settled) return;
       settled = true;
       killWarmWorker(worker!);
-      reject(new Error(`Antigravity CLI timed out after ${timeoutMs}ms`));
+      reject(new Error(agyTimeoutMessage(timeoutMs, accumulated.trim() !== "")));
     }, timeoutMs);
 
     const finish = (code: number | null) => {
@@ -278,7 +301,14 @@ async function runAgyFastStream(
           if (typeof ev.result?.response === "string") {
             finalResponse = ev.result.response;
           }
-          finish(0);
+          const deniedError = accumulated.trim() ? null : agyResultError(ev.result ?? {});
+          if (deniedError && !settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(new Error(deniedError));
+          } else {
+            finish(0);
+          }
           killWarmWorker(worker!);
         }
       } catch {
@@ -305,6 +335,26 @@ async function runAgyFastStream(
       }
     }
   });
+}
+
+/**
+ * execFile's own message is "Command failed: <full command line>", which hides a timeout and repeats the prompt.
+ * Say what happened instead: a timeout, the CLI's first stderr line, or its exit code.
+ */
+export function cliFailureMessage(
+  err: { message?: string; killed?: boolean; signal?: string | null; code?: unknown; stderr?: unknown },
+  timeoutMs: number
+): string {
+  // execFile also sets `killed` when output passes maxBuffer, so check that before calling it a timeout.
+  if (err.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "출력이 너무 커서(10MB 초과) 중단했어요.";
+  if (err.killed || err.signal === "SIGTERM") {
+    return `${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했어요(시간 초과).`;
+  }
+  // The last line, because some CLIs print a banner to stderr before the actual error.
+  const lastLine = String(err.stderr ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop();
+  if (lastLine) return lastLine.slice(0, 300);
+  if (typeof err.code === "number") return `종료 코드 ${err.code}로 끝났어요.`;
+  return err.message?.startsWith("Command failed:") ? "CLI 실행에 실패했어요." : (err.message ?? "CLI 실행에 실패했어요.");
 }
 
 export const defaultCliRunner: CliRunner = async (cmd, args, opts) => {
@@ -356,6 +406,16 @@ export const defaultCliRunner: CliRunner = async (cmd, args, opts) => {
   if (!args.includes("login")) {
     pending.child.stdin?.end();
   }
-  const { stdout, stderr } = await pending;
-  return { stdout, stderr };
+  try {
+    const { stdout, stderr } = await pending;
+    return { stdout, stderr };
+  } catch (err: any) {
+    // Keep stdout/stderr on the error: claude prints a usage-limit reason as JSON on stdout when it exits non-zero.
+    throw Object.assign(new Error(cliFailureMessage(err, opts.timeoutMs)), {
+      stdout: err?.stdout,
+      stderr: err?.stderr,
+      code: err?.code,
+      killed: err?.killed
+    });
+  }
 };
