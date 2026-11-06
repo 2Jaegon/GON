@@ -1109,6 +1109,18 @@ async function loadModelCatalog() {
   modelSelection = normalizeModelSelection(modelSelection || saved);
   saveModelSelection();
   renderModelPicker();
+  prewarmSelectedModel();
+}
+
+function prewarmSelectedModel() {
+  if (!currentWorkspaceId || !modelSelection || !modelSelection.model) return;
+  const conn = selectedConnection();
+  if (!conn || conn.provider !== "google") return;
+  apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/models/warm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: "google", model: modelSelection.model })
+  }).catch(() => {});
 }
 
 function renderModelPicker() {
@@ -1209,6 +1221,7 @@ function selectModelEffort(effort) {
   }
   saveModelSelection();
   renderModelPicker();
+  prewarmSelectedModel();
 }
 
 function selectModelItem(connectionId, modelId) {
@@ -1221,6 +1234,7 @@ function selectModelItem(connectionId, modelId) {
   modelSelection = { connectionId, model: resolvedModel, effort: nextEffort };
   saveModelSelection();
   renderModelPicker();
+  prewarmSelectedModel();
   closeModelPickerPopover();
 }
 
@@ -2567,16 +2581,15 @@ function initComposerDragAndDrop() {
 function isLikelyChat(prompt) {
   const text = prompt.trim().toLowerCase();
   const buildKeywords = [
-    "만들어", "만들기", "작성해", "작성하기", "구현해", "구현하기", "수정해", "수정하기",
-    "추가해", "추가하기", "분석해", "분석하기", "리팩토링", "계획", "설계", "개발해",
-    "고쳐줘", "고치기", "빌드", "배포", "테스트", "코드", "파일", "컴포넌트", "함수",
-    "클래스", "버그", "에러", "스크립트", "엔드포인트", "마이그레이션", "아키텍처",
-    "create", "build", "make", "implement", "add", "fix", "refactor", "plan",
-    "design", "develop", "code", "file", "test", "debug", "error", "write", "generate"
+    "기능 추가", "버그 수정", "엔드포인트", "컴포넌트", "테스트 추가", "만들어",
+    "구현", "개발", "코드 작성", "코드 수정", "코드 추가", "리팩토링", "전면 개편",
+    "전체 재설계", "아키텍처", "마이그레이션", "모노레포", "보안 감사", "오타",
+    "단순 수정", "색상 변경", "문구 수정", "버전 확인", "포맷팅",
+    "feature", "bugfix", "endpoint", "component", "api", "build", "create",
+    "implement", "refactor", "architecture", "migration", "security audit",
+    "full overhaul", "typo", "one line", "quick fix", "color change", "lint"
   ];
-  const hasBuild = buildKeywords.some((kw) => text.includes(kw));
-  if (hasBuild) return false;
-  return text.length <= 30 || /ㅎㅇ|안녕|반가워|누구|소개|날씨|고마워|감사|hi|hello|hey/i.test(text);
+  return !buildKeywords.some((kw) => text.includes(kw));
 }
 
 async function submitChatPrompt() {
@@ -2704,7 +2717,7 @@ async function submitChatPrompt() {
   }
 
   const mode = document.getElementById("run-mode-select") ? document.getElementById("run-mode-select").value : "auto";
-  const requireApproval = document.getElementById("run-approval-check") ? document.getElementById("run-approval-check").checked : true;
+  const requireApproval = document.getElementById("run-approval-check") ? document.getElementById("run-approval-check").checked : false;
 
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`, {
@@ -2757,8 +2770,8 @@ async function submitChatPrompt() {
     } catch {}
 
     rebindTurnIds(tempId, actualRunId);
-    await loadSidebarRuns();
     connectRunSSE(actualRunId);
+    loadSidebarRuns();
   } catch (err) {
     console.error("Submit error:", err);
     updateTurnStatus(tempId, "네트워크 오류 발생", false);
@@ -2835,6 +2848,19 @@ function connectRunSSE(runId) {
       }
     } catch {}
     appendLog("run:classified", e.data);
+  });
+
+  activeEventSource.addEventListener("chat:delta", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload.provider) setTurnAvatar(runId, payload.provider);
+      if (payload.text) {
+        setResponseText(runId, payload.text);
+      }
+    } catch {}
+    const wrap = document.getElementById(`process-wrap-${runId}`);
+    if (wrap) wrap.classList.add("hidden");
+    scrollChatToBottom();
   });
 
   activeEventSource.addEventListener("chat:response", (e) => {

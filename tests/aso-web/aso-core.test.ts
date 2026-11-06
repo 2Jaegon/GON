@@ -14,6 +14,9 @@ describe("ASO Core Orchestration Engine", () => {
     const chat3 = classifier.classify("너 누구야?");
     expect(chat3.mode).toBe("chat");
 
+    const chat4 = classifier.classify("너는 어떤 식으로 내 답변에 응답해?");
+    expect(chat4.mode).toBe("chat");
+
     const fast = classifier.classify("단순 오타 수정 및 버전 확인");
     expect(fast.mode).toBe("fast");
 

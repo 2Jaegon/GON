@@ -118,6 +118,17 @@ export class OrchestratorService {
         const selection = await this.selectionFor(run);
         const { provider } = selection;
         const conversationalPrompt = await this.buildConversationalPrompt(run);
+        const streamDeltaEvent = async (evType: string, payload: Record<string, any>) => {
+          this.eventBus.publish(runId, {
+            id: 0,
+            workspaceId,
+            runId,
+            sequence: 0,
+            eventType: evType,
+            payload,
+            recordedAt: new Date().toISOString()
+          });
+        };
         const chatResult = await (provider.executeChat
           ? provider.executeChat({
               runId,
@@ -128,14 +139,16 @@ export class OrchestratorService {
                 : run.providerPreference !== "auto" ? run.providerPreference : "gemini-3.8-flash-low",
               effort: selection.effort,
               cwd: selection.cwd,
-              context: run.runContext
+              context: run.runContext,
+              onEvent: streamDeltaEvent
             })
           : this.providerRegistry.get("agy").executeChat!({
               runId,
               workspaceId,
               prompt: conversationalPrompt,
               model: "gemini-3.8-flash-low",
-              context: run.runContext
+              context: run.runContext,
+              onEvent: streamDeltaEvent
             }));
 
         await this.db.usage.record(chatResult.usage);

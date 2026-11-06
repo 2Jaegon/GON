@@ -44,10 +44,17 @@ export class AgyProvider implements IProviderAdapter {
 
   constructor(private readonly run: CliRunner = defaultCliRunner) {}
 
-  private async call(prompt: string, timeoutMs: number, model?: string, cwd?: string): Promise<string> {
+  private async call(
+    prompt: string,
+    timeoutMs: number,
+    model?: string,
+    cwd?: string,
+    onDelta?: (delta: string, fullText: string) => void
+  ): Promise<string> {
     let stdout: string;
     try {
-      ({ stdout } = await this.run("agy", agyArgs(prompt, model), { cwd, timeoutMs }));
+      const opts = onDelta ? { cwd, timeoutMs, onDelta } : { cwd, timeoutMs };
+      ({ stdout } = await this.run("agy", agyArgs(prompt, model), opts));
     } catch (err: any) {
       throw new ProviderCallError("Antigravity", err?.message ?? String(err));
     }
@@ -60,7 +67,7 @@ export class AgyProvider implements IProviderAdapter {
    * Executes a direct conversational chat turn via the agy CLI
    */
   public async executeChat(context: ChatExecutionContext): Promise<ChatExecutionResult> {
-    const { prompt, model, cwd, workspaceId, runId, context: runCtx } = context;
+    const { prompt, model, cwd, workspaceId, runId, context: runCtx, onEvent } = context;
 
     let fullPrompt = prompt;
     const attachments = runCtx?.attachments as Array<{ name: string; text?: string }> | undefined;
@@ -70,7 +77,12 @@ export class AgyProvider implements IProviderAdapter {
     }
 
     const startTime = Date.now();
-    const output = await this.call(fullPrompt, 35000, model, cwd);
+    const onDelta = onEvent
+      ? (delta: string, text: string) => {
+          void onEvent("chat:delta", { delta, text, provider: "antigravity" });
+        }
+      : undefined;
+    const output = await this.call(fullPrompt, 35000, model, cwd, onDelta);
     return { output, usage: unmeasuredUsage(workspaceId, runId, "chat", model, Date.now() - startTime) };
   }
 

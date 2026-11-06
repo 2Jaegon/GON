@@ -3,7 +3,7 @@ import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
 import { RegisterApiKeyDTOSchema, ProviderConnectionView } from "@aso/contracts";
 import { redactSecrets } from "@aso/security";
-import { CliRunner, SubscriptionDetector } from "@aso/provider-adapters";
+import { CliRunner, SubscriptionDetector, prewarmAgyModel } from "@aso/provider-adapters";
 
 export async function providerRoutes(server: FastifyInstance, options: { db: IDatabase; cliRunner?: CliRunner }) {
   const { db } = options;
@@ -85,7 +85,22 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
           models: m?.models ?? []
         };
       });
+    if (!options.cliRunner) {
+      const googleSub = subscription.find((s) => s.provider === "google");
+      if (googleSub && Array.isArray(googleSub.models) && googleSub.models.length > 0) {
+        prewarmAgyModel(googleSub.models[0].id);
+      }
+    }
     return { subscription };
+  });
+
+  // Pre-warm a local CLI model in the background so chat responses start immediately
+  server.post("/api/v1/workspaces/:workspaceId/models/warm", async (req) => {
+    const body = (req.body ?? {}) as { provider?: string; model?: string };
+    if (!options.cliRunner && (!body.provider || body.provider === "google")) {
+      prewarmAgyModel(body.model);
+    }
+    return { ok: true };
   });
 
   // Trigger native CLI OAuth login for a subscription provider (Claude, Gemini/Antigravity, Codex)

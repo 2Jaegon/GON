@@ -77,9 +77,9 @@ export class TaskClassifier {
       "만들어",
       "구현",
       "개발",
-      "설계",
-      "계획",
-      "코드",
+      "코드 작성",
+      "코드 수정",
+      "코드 추가",
       "feature",
       "bugfix",
       "endpoint",
@@ -102,51 +102,12 @@ export class TaskClassifier {
       };
     }
 
-    // 4. Chat / Conversational Signals (greetings, identity, casual dialogue)
-    const chatKeywords = [
-      "ㅎㅇ",
-      "안녕",
-      "안녕하세요",
-      "하이",
-      "헬로",
-      "반가워",
-      "누구야",
-      "누구세요",
-      "이름이 뭐야",
-      "뭐 할 수 있어",
-      "할 수 있는 일",
-      "자기소개",
-      "소개해줘",
-      "오늘 날씨",
-      "날씨 어때",
-      "고마워",
-      "감사해",
-      "수고했어",
-      "잘했어",
-      "hello",
-      "hi",
-      "hey",
-      "who are you",
-      "what can you do",
-      "thanks",
-      "thank you"
-    ];
-    const hasChatIntent = chatKeywords.some((kw) => text.includes(kw));
-
-    if (hasChatIntent || text.length <= 15) {
-      return {
-        mode: "chat",
-        reason: "Detected conversational greeting or general dialogue without plan/build requirements",
-        confidence: 0.95,
-        indicators: ["chat:conversation"]
-      };
-    }
-
+    // 4. Default to Chat / Conversational Mode when no explicit build/refactor/fix keywords are present
     return {
-      mode: "standard",
-      reason: "Default mode for general development task",
-      confidence: 0.7,
-      indicators: ["default:standard"]
+      mode: "chat",
+      reason: "Detected conversational question or general dialogue without plan/build requirements",
+      confidence: 0.95,
+      indicators: ["chat:conversation"]
     };
   }
 }
