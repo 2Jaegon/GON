@@ -1,4 +1,6 @@
+import { spawn } from "node:child_process";
 import { Effort } from "./types.js";
+import { cliFailureMessage, resolveCliCommand } from "./cli-runner.js";
 
 export const AGENT_SAFE_TOOLS = [
   "Read",
@@ -234,4 +236,161 @@ export function describeDenial(d: AgentDenial): {
 
 export function isResumeFailure(message: string): boolean {
   return /No conversation found/i.test(message);
+}
+
+export type AgentRunner = (
+  opts: AgentRunOptions,
+  onEvent: (e: AgentEvent) => void,
+  signal: AbortSignal
+) => Promise<AgentResult>;
+
+export async function runClaudeAgent(
+  opts: AgentRunOptions,
+  onEvent: (e: AgentEvent) => void,
+  signal: AbortSignal,
+  deps?: {
+    spawn?: typeof import("node:child_process").spawn;
+    resolve?: typeof resolveCliCommand;
+  }
+): Promise<AgentResult> {
+  const resolved = deps?.resolve ? await deps.resolve("claude") : await resolveCliCommand("claude");
+  const spawnFn = deps?.spawn ?? spawn;
+  const args = [...resolved.prefixArgs, ...buildAgentArgs(opts)];
+
+  return new Promise<AgentResult>((resolve, reject) => {
+    let settled = false;
+    let finalResult: AgentResult | null = null;
+    let activeToolCount = 0;
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    let idleTimer: NodeJS.Timeout | null = null;
+    let wallTimer: NodeJS.Timeout | null = null;
+
+    const idleTimeoutMs = opts.idleTimeoutMs ?? 120000;
+    const maxWallMs = opts.maxWallMs ?? 1800000;
+
+    const cleanup = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      if (wallTimer) {
+        clearTimeout(wallTimer);
+        wallTimer = null;
+      }
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    const doReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+
+    const doResolve = (res: AgentResult) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(res);
+    };
+
+    const resetIdleTimer = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      if (activeToolCount > 0) {
+        return;
+      }
+      idleTimer = setTimeout(() => {
+        doReject(new Error("응답이 없어 중단했어요(무응답 시간 초과)."));
+        child.kill();
+      }, idleTimeoutMs);
+      idleTimer.unref?.();
+    };
+
+    const onAbort = () => {
+      doReject(new Error("중단했어요."));
+      child.kill();
+    };
+
+    if (signal.aborted) {
+      doReject(new Error("중단했어요."));
+      return;
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    wallTimer = setTimeout(() => {
+      doReject(new Error("최대 실행 시간(30분)을 초과해 중단했어요."));
+      child.kill();
+    }, maxWallMs);
+    wallTimer.unref?.();
+
+    const child = spawnFn(resolved.cmd, args, {
+      cwd: opts.cwd,
+      shell: false,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+
+    child.stdin?.end();
+
+    resetIdleTimer();
+
+    const processLine = (line: string) => {
+      const events = parseAgentLine(line);
+      for (const ev of events) {
+        if (ev.kind === "tool") {
+          activeToolCount++;
+        } else if (ev.kind === "tool_done") {
+          activeToolCount = Math.max(0, activeToolCount - 1);
+        } else if (ev.kind === "result") {
+          finalResult = ev;
+        }
+        onEvent(ev);
+      }
+      resetIdleTimer();
+    };
+
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      stdoutBuf += chunk;
+      const lines = stdoutBuf.split(/\r?\n/);
+      stdoutBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        processLine(line);
+      }
+    });
+
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderrBuf += chunk;
+    });
+
+    child.on("error", (err) => {
+      doReject(err);
+    });
+
+    child.on("close", (code) => {
+      if (stdoutBuf.trim()) {
+        processLine(stdoutBuf.trim());
+        stdoutBuf = "";
+      }
+
+      if (finalResult) {
+        doResolve(finalResult);
+        return;
+      }
+
+      if (code !== 0) {
+        const msg = cliFailureMessage({ stderr: stderrBuf, code }, idleTimeoutMs);
+        doReject(new Error(msg));
+        return;
+      }
+
+      doReject(new Error("결과를 받지 못하고 프로세스가 종료됐어요."));
+    });
+  });
 }
