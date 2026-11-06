@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
 import { CreateRunDTOSchema, ConnectionModels, AgentApprovalDTOSchema } from "@aso/contracts";
@@ -295,6 +297,64 @@ export async function runRoutes(
     const { projectId } = req.params as { workspaceId: string; projectId: string };
     const count = await db.runs.clearForProject(projectId);
     return { ok: true, deletedCount: count };
+  });
+
+  // Serve generated images from run workspace .gon-images
+  server.get("/api/v1/workspaces/:workspaceId/runs/:runId/images/:name", async (req, reply) => {
+    const { workspaceId, runId, name } = req.params as { workspaceId: string; runId: string; name: string };
+
+    if (!name || !/^[\w.-]+$/.test(name) || name.includes("..")) {
+      return reply.status(400).send({ error: { code: "INVALID_IMAGE_NAME", message: "잘못된 이미지 파일 이름이에요" } });
+    }
+
+    const ext = path.extname(name).toLowerCase();
+    const MIME_TYPES: Record<string, string> = {
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+    };
+
+    const contentType = MIME_TYPES[ext];
+    if (!contentType) {
+      return reply.status(400).send({ error: { code: "UNSUPPORTED_IMAGE_FORMAT", message: "지원하지 않는 이미지 형식이에요" } });
+    }
+
+    const run = await db.runs.findById(runId);
+    if (!run || run.workspaceId !== workspaceId) {
+      return reply.status(404).send({ error: { code: "RUN_NOT_FOUND", message: "실행을 찾을 수 없어요" } });
+    }
+
+    const baseDir = run.runContext?.cwd || (await resolveActiveWorkspacePath(db, workspaceId));
+    if (!baseDir) {
+      return reply.status(404).send({ error: { code: "IMAGE_NOT_FOUND", message: "이미지를 찾을 수 없어요" } });
+    }
+
+    const gonImagesDir = path.resolve(baseDir, ".gon-images");
+    const imagePath = path.resolve(gonImagesDir, name);
+
+    if (!imagePath.startsWith(gonImagesDir + path.sep)) {
+      return reply.status(400).send({ error: { code: "PATH_TRAVERSAL_DETECTED", message: "허용되지 않는 파일 경로예요" } });
+    }
+
+    if (!fs.existsSync(imagePath)) {
+      return reply.status(404).send({ error: { code: "IMAGE_NOT_FOUND", message: "이미지를 찾을 수 없어요" } });
+    }
+
+    try {
+      const realPath = fs.realpathSync(imagePath);
+      const realGonImagesDir = fs.realpathSync(gonImagesDir);
+      if (!realPath.startsWith(realGonImagesDir + path.sep)) {
+        return reply.status(403).send({ error: { code: "FORBIDDEN", message: "접근할 수 없는 이미지 경로예요" } });
+      }
+
+      const buffer = fs.readFileSync(realPath);
+      reply.header("Content-Type", contentType);
+      reply.header("Cache-Control", "public, max-age=86400, immutable");
+      return reply.send(buffer);
+    } catch {
+      return reply.status(404).send({ error: { code: "IMAGE_NOT_FOUND", message: "이미지를 찾을 수 없어요" } });
+    }
   });
 }
 
