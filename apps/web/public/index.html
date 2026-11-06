@@ -95,7 +95,7 @@
           <span>예약됨</span>
         </button>
 
-        <button class="nav-item" data-tab="skills">
+        <button class="nav-item" data-tab="skills" onclick="switchNavTab('skills')">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           <span>스킬 카탈로그</span>
         </button>
@@ -442,54 +442,8 @@
           </div>
         </div>
 
-        <div class="skills-grid">
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">ponytail</span>
-              <span class="badge badge-accent">Core 항시 적용</span>
-            </div>
-            <p class="skill-desc">YAGNI 원칙, Node.js 내장 모듈 우선, 최소 diff 및 변경 범위 통제 원칙을 적용합니다.</p>
-          </div>
-
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">andrej-karpathy-skills</span>
-              <span class="badge badge-accent">Core 항시 적용</span>
-            </div>
-            <p class="skill-desc">간결한 엔지니어링, 첫 원칙 설계, 철저한 테스트 자동화 원칙을 적용합니다.</p>
-          </div>
-
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">design-taste-frontend</span>
-              <span class="badge badge-accent">TasteSkill</span>
-            </div>
-            <p class="skill-desc">뻔한 템플릿과 불필요한 장식을 배제하고 품격 있는 타이포그래피와 따뜻한 색채를 적용합니다.</p>
-          </div>
-
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">design-motion-principles</span>
-              <span class="badge badge-sub">Motion</span>
-            </div>
-            <p class="skill-desc">인터랙션 피드백과 부드러운 전환 애니메이션 원칙을 준수합니다.</p>
-          </div>
-
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">graphify</span>
-              <span class="badge badge-sub">STANDARD/DEEP 조건부</span>
-            </div>
-            <p class="skill-desc">복합 코드베이스 지식 그래프 분석 및 모듈 간 의존성 관계를 파악합니다.</p>
-          </div>
-
-          <div class="skill-card">
-            <div class="skill-header">
-              <span class="skill-name">claude-mem</span>
-              <span class="badge badge-sub">DEEP 전용</span>
-            </div>
-            <p class="skill-desc">세션 간 영속 컨텍스트 및 작업 피드백 학습을 관리합니다.</p>
-          </div>
+        <div class="skills-grid" id="skills-grid">
+          <p class="text-faint">등록된 스킬이 없어요</p>
         </div>
       </section>
 

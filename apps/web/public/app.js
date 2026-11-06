@@ -1396,6 +1396,7 @@ function switchTab(tabId) {
   if (tabId === "connections") loadConnections();
   if (tabId === "runner") loadRunners();
   if (tabId === "usage") loadUsage();
+  if (tabId === "skills") loadSkills();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -2627,6 +2628,40 @@ async function viewRun(runId) {
     await viewSession(session.id);
   } else {
     await viewSession(runId);
+  }
+}
+
+// ==========================================================================
+// Skills Catalog
+// ==========================================================================
+
+async function loadSkills() {
+  const grid = document.getElementById("skills-grid");
+  if (!grid) return;
+  try {
+    const res = await apiFetch(`${API_URL}/skills`);
+    if (!res.ok) {
+      grid.innerHTML = `<p class="text-faint">등록된 스킬이 없어요</p>`;
+      return;
+    }
+    const data = await res.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (items.length === 0) {
+      grid.innerHTML = `<p class="text-faint">등록된 스킬이 없어요</p>`;
+      return;
+    }
+    grid.innerHTML = items.map((s) => `
+      <div class="skill-card">
+        <div class="skill-header">
+          <span class="skill-name">${escapeHtml(s.name || s.id)}</span>
+          <span class="badge badge-accent">${escapeHtml(s.source || "builtin")}</span>
+        </div>
+        <p class="skill-desc">${escapeHtml(s.description || "설명이 없어요")}</p>
+      </div>
+    `).join("");
+  } catch (err) {
+    console.warn("Load skills error:", err);
+    grid.innerHTML = `<p class="text-faint">등록된 스킬이 없어요</p>`;
   }
 }
 
