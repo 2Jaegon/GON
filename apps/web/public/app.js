@@ -618,10 +618,6 @@ document.addEventListener("keydown", (e) => {
     renderAttachmentsPreview();
     return;
   }
-
-  if (typeof isChatExpanded !== "undefined" && isChatExpanded) {
-    toggleChatExpand();
-  }
 });
 
 // ==========================================================================
@@ -919,7 +915,7 @@ function toggleChatExpand() {
     }
     btn.setAttribute(
       "title",
-      isChatExpanded ? "우측 그래프 사이드바 열기 [Esc]" : "우측 그래프 사이드바 접기 [Esc]"
+      isChatExpanded ? "우측 그래프 사이드바 열기" : "우측 그래프 사이드바 접기"
     );
   }
 
