@@ -17,12 +17,12 @@ console.log("=== ASO Web & API Server Starting ===");
 
 const apiProcess = spawn(process.execPath, [path.join(rootDir, "apps/api/dist/index.js")], {
   stdio: "inherit",
-  env: { ...process.env, PORT: "4000", HOST: "127.0.0.1" }
+  env: { ...process.env, PORT: "4000", HOST: "0.0.0.0" }
 });
 
 const webProcess = spawn(process.execPath, [path.join(rootDir, "apps/web/dist/server.js")], {
   stdio: "inherit",
-  env: { ...process.env, WEB_PORT: "3000", HOST: "127.0.0.1" }
+  env: { ...process.env, WEB_PORT: "3000", HOST: "0.0.0.0" }
 });
 
 const cleanExit = () => {
