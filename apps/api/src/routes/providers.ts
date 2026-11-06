@@ -43,8 +43,12 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
         if (!existing) {
           await db.providers.create(d.connectionView);
         } else {
-          await db.providers.updateStatus(d.connectionView.id, d.connectionView.status);
-          await db.providers.updateMetadata(d.connectionView.id, { models: d.connectionView.metadata?.models });
+          const nextStatus = existing.metadata?.userDisconnected ? "needs_action" : d.connectionView.status;
+          await db.providers.updateStatus(d.connectionView.id, nextStatus);
+          await db.providers.updateMetadata(d.connectionView.id, {
+            ...existing.metadata,
+            models: d.connectionView.metadata?.models
+          });
         }
       }
     }
@@ -99,8 +103,16 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
         if (!existing) {
           await db.providers.create(d.connectionView);
         } else {
-          await db.providers.updateStatus(d.connectionView.id, d.connectionView.status);
-          await db.providers.updateMetadata(d.connectionView.id, { models: d.connectionView.metadata?.models });
+          const isTarget = d.provider === provider;
+          const nextStatus = isTarget && result.success
+            ? "connected"
+            : (existing.metadata?.userDisconnected ? "needs_action" : d.connectionView.status);
+          await db.providers.updateStatus(d.connectionView.id, nextStatus);
+          await db.providers.updateMetadata(d.connectionView.id, {
+            ...existing.metadata,
+            userDisconnected: isTarget ? false : existing.metadata?.userDisconnected,
+            models: d.connectionView.metadata?.models
+          });
         }
       }
     }
@@ -115,6 +127,7 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
 
     return {
       success: true,
+      authenticated: true,
       message: result.message,
       items
     };
@@ -134,6 +147,10 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
     const target = existingList.find((c) => c.provider === provider && c.mode === "LOCAL_NATIVE_CLI");
     if (target && result.success) {
       await db.providers.updateStatus(target.id, "needs_action");
+      await db.providers.updateMetadata(target.id, {
+        ...target.metadata,
+        userDisconnected: true
+      });
     }
 
     const items = await db.providers.listForWorkspace(workspaceId);

@@ -88,8 +88,10 @@ export const defaultCliRunner: CliRunner = async (cmd, args, opts) => {
     maxBuffer: 10 * 1024 * 1024,
     shell: false
   });
-  // The CLI must not wait for input on an open stdin pipe.
-  pending.child.stdin?.end();
+  // The CLI must not wait for input on an open stdin pipe during non-interactive calls.
+  if (!args.includes("login")) {
+    pending.child.stdin?.end();
+  }
   const { stdout, stderr } = await pending;
   return { stdout, stderr };
 };

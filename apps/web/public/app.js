@@ -1414,22 +1414,25 @@ function closeSidebarSearch() {
 })();
 
 function switchTab(tabId) {
+  const normalizedTabId = tabId === "runners" ? "runner" : tabId;
+  const target = document.getElementById(`view-${normalizedTabId}`);
+  if (!target) {
+    return;
+  }
+
   document.querySelectorAll(".nav-item").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === tabId);
+    btn.classList.toggle("active", btn.dataset.tab === normalizedTabId);
   });
   document.querySelectorAll(".view-panel").forEach((sec) => {
     sec.classList.remove("active");
   });
-  const target = document.getElementById(`view-${tabId}`);
-  if (target) {
-    target.classList.add("active");
-  }
+  target.classList.add("active");
 
   // Load view-specific data
-  if (tabId === "connections") loadConnections();
-  if (tabId === "runner") loadRunners();
-  if (tabId === "usage") loadUsage();
-  if (tabId === "skills") loadSkills();
+  if (normalizedTabId === "connections") loadConnections();
+  if (normalizedTabId === "runner") loadRunners();
+  if (normalizedTabId === "usage") loadUsage();
+  if (normalizedTabId === "skills") loadSkills();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -1580,6 +1583,86 @@ function renderWorkspaceChip() {
   }
 }
 
+function openRunnerRegisterModal() {
+  const modal = document.getElementById("runner-register-modal-backdrop");
+  if (modal) {
+    modal.classList.remove("hidden");
+  }
+}
+
+function closeRunnerRegisterModal() {
+  const modal = document.getElementById("runner-register-modal-backdrop");
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+}
+
+function closeRunnerRegisterModalOnBackdrop(e) {
+  if (e.target && e.target.id === "runner-register-modal-backdrop") {
+    closeRunnerRegisterModal();
+  }
+}
+
+async function issuePairingCodeInModal() {
+  if (!currentWorkspaceId) return;
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
+      method: "POST"
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const codeEl = document.getElementById("modal-pairing-code-value");
+      const cmdEl = document.getElementById("modal-pairing-command-text");
+      const boxEl = document.getElementById("modal-pairing-code-display");
+      if (codeEl) codeEl.textContent = data.pairingCode;
+      if (cmdEl) cmdEl.textContent = `aso-runner pair ${data.pairingCode}`;
+      if (boxEl) boxEl.classList.remove("hidden");
+    } else {
+      showToast("페어링 코드 생성에 실패했어요", "error");
+    }
+  } catch (err) {
+    showToast("페어링 코드 생성 오류: " + err.message, "error");
+  }
+}
+
+function copyModalPairingCommand() {
+  const cmdEl = document.getElementById("modal-pairing-command-text");
+  if (!cmdEl) return;
+  navigator.clipboard.writeText(cmdEl.textContent || "").then(() => {
+    showToast("페어링 명령어를 복사했어요", "success");
+  }).catch(() => {});
+}
+
+async function pickLocalHostFolderFromModal() {
+  if (!currentWorkspaceId) return;
+  const btn = document.getElementById("modal-pick-local-folder-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/pick-local-folder`, {
+      method: "POST"
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 200 && data.activePath) {
+      if (data.device) currentRunnerDevice = data.device;
+      currentActiveWorkspacePath = normalizePath(data.activePath);
+      currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
+      try {
+        localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
+      } catch {}
+      renderWorkspaceChip();
+      renderSettingsWorkspaceFolders();
+      closeRunnerRegisterModal();
+      showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
+    } else if (res.status !== 200) {
+      showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
+    }
+  } catch (err) {
+    showToast("폴더 선택 오류: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function pickWorkspaceFolder() {
   const btn = document.getElementById("composer-folder-btn");
   const labelEl = document.getElementById("composer-folder-btn-label");
@@ -1591,28 +1674,17 @@ async function pickWorkspaceFolder() {
       await loadRunners();
     }
 
-    let res = null;
-    let data = {};
-
-    if (currentRunnerDevice) {
-      res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
-        method: "POST"
-      });
-      data = await res.json().catch(() => ({}));
+    if (!currentRunnerDevice) {
+      openRunnerRegisterModal();
+      return;
     }
 
-    // Fallback to direct local host folder picker if no remote runner is online
-    if (!res || res.status === 409) {
-      res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/pick-local-folder`, {
-        method: "POST"
-      });
-      data = await res.json().catch(() => ({}));
-    }
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
+      method: "POST"
+    });
+    const data = await res.json().catch(() => ({}));
 
     if (res.status === 200) {
-      if (data.device) {
-        currentRunnerDevice = data.device;
-      }
       if (data.activePath) {
         currentActiveWorkspacePath = normalizePath(data.activePath);
         currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
@@ -1623,6 +1695,8 @@ async function pickWorkspaceFolder() {
         renderSettingsWorkspaceFolders();
         showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
       }
+    } else if (res.status === 409) {
+      openRunnerRegisterModal();
     } else if (res.status === 422 || res.status === 504) {
       showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
     } else {
@@ -2777,7 +2851,7 @@ async function detectSubscriptions() {
   const btn = document.getElementById("detect-subs-btn");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "감지 중…";
+    btn.textContent = "새로고침 중…";
   }
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/detect-subscriptions`, {
@@ -2786,16 +2860,16 @@ async function detectSubscriptions() {
     if (res.ok) {
       await loadConnections();
       await loadModelCatalog();
-      showToast("구독 AI 목록을 갱신했어요", "success");
+      showToast("AI 서비스 연결 상태를 새로고침했어요", "success");
     } else {
-      showToast("구독 감지 실패", "error");
+      showToast("상태 새로고침 실패", "error");
     }
   } catch (err) {
-    showToast("구독 감지 오류: " + err.message, "error");
+    showToast("새로고침 오류: " + err.message, "error");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "구독 감지";
+      btn.textContent = "상태 새로고침";
     }
   }
 }
@@ -2808,7 +2882,7 @@ async function loginSubscriptionProvider(provider) {
     btn.disabled = true;
     btn.textContent = "브라우저 로그인 대기 중…";
   }
-  showToast("브라우저 창이 열리면 로그인을 완료해 주세요", "info");
+  showToast("브라우저 로그인 창을 확인하여 인증을 완료해 주세요", "info");
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${encodeURIComponent(provider)}/login`, {
       method: "POST"
@@ -2816,8 +2890,8 @@ async function loginSubscriptionProvider(provider) {
     const data = await res.json().catch(() => ({}));
     await loadConnections();
     await loadModelCatalog();
-    if (res.ok && data.authenticated) {
-      showToast("구독 계정이 성공적으로 연결되었어요!", "success");
+    if (res.ok && (data.success || data.authenticated)) {
+      showToast(data.message || "AI 서비스 계정이 성공적으로 연결되었어요!", "success");
     } else {
       showToast(data.message || data.error?.message || "로그인을 완료하지 못했어요", "error");
     }
@@ -2853,6 +2927,13 @@ async function logoutSubscriptionProvider(provider) {
   }
 }
 
+function cleanServiceTitle(provider, fallback) {
+  if (provider === "anthropic") return "Claude (Anthropic)";
+  if (provider === "openai") return "ChatGPT (OpenAI)";
+  if (provider === "google") return "Gemini (Google)";
+  return fallback || provider;
+}
+
 async function loadConnections() {
   if (!currentWorkspaceId) return;
   const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections`);
@@ -2861,38 +2942,45 @@ async function loadConnections() {
     const grid = document.getElementById("connections-list");
     if (!grid) return;
     if (!data.items || data.items.length === 0) {
-      grid.innerHTML = `<p class="text-faint">연결된 AI가 없어요.</p>`;
+      grid.innerHTML = `<p class="text-faint">연결 가능한 AI 서비스가 없어요.</p>`;
       return;
     }
     grid.innerHTML = data.items.map((c) => {
       const isConnected = c.status === "connected";
       const planName = c.metadata?.models?.plan ? String(c.metadata.models.plan).toUpperCase() : "";
       const modelCount = Array.isArray(c.metadata?.models?.models) ? c.metadata.models.models.length : 0;
+      const serviceTitle = cleanServiceTitle(c.provider, c.displayName);
       const badge = isConnected
         ? `<span class="badge badge-accent">${escapeHtml(planName ? `연결됨 · ${planName}` : "연결됨")}</span>`
         : `<span class="badge badge-sub" style="color:#f59e0b;border-color:rgba(245,158,11,0.4);">로그인 필요</span>`;
 
       const subtitle = isConnected
-        ? `${modelCount > 0 ? `${modelCount}개 모델 사용 가능 · ` : ""}${escapeHtml(c.details || "정상 연결됨")}`
-        : escapeHtml(c.details || "클릭하여 브라우저 로그인으로 구독을 연결하세요");
+        ? `${modelCount > 0 ? `${modelCount}개 모델 사용 가능 · ` : ""}구독 계정 연결됨`
+        : "클릭하여 로그인 화면으로 이동하고 구독 계정을 연결하세요";
 
       const actionButtons = isConnected
         ? `<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-             <button type="button" class="btn btn-ghost btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="loginSubscriptionProvider('${escapeHtml(c.provider)}')">재인증</button>
-             ${c.provider !== "google" ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#ef4444;" id="conn-logout-btn-${escapeHtml(c.provider)}" onclick="logoutSubscriptionProvider('${escapeHtml(c.provider)}')">연결 해제</button>` : ""}
+             <button type="button" class="btn btn-ghost btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="event.stopPropagation(); loginSubscriptionProvider('${escapeHtml(c.provider)}')">다시 로그인</button>
+             <button type="button" class="btn btn-ghost btn-sm" style="color:#ef4444;" id="conn-logout-btn-${escapeHtml(c.provider)}" onclick="event.stopPropagation(); logoutSubscriptionProvider('${escapeHtml(c.provider)}')">연결 해제</button>
            </div>`
-        : `<button type="button" class="btn btn-primary btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="loginSubscriptionProvider('${escapeHtml(c.provider)}')">로그인하여 연결</button>`;
+        : `<button type="button" class="btn btn-primary btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="event.stopPropagation(); loginSubscriptionProvider('${escapeHtml(c.provider)}')">로그인하여 연결</button>`;
+
+      const cardClickAttr = isConnected
+        ? ""
+        : `onclick="loginSubscriptionProvider('${escapeHtml(c.provider)}')" style="margin-bottom:10px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid rgb(var(--c-line));border-radius:8px;cursor:pointer;"`;
+
+      const defaultStyleAttr = `style="margin-bottom:10px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid rgb(var(--c-line));border-radius:8px;"`;
 
       return `
-        <div class="content-card" style="margin-bottom:10px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid rgb(var(--c-line));border-radius:8px;">
+        <div class="content-card" ${isConnected ? defaultStyleAttr : cardClickAttr}>
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="26" height="26" style="border-radius:6px;flex-shrink:0;" />
+            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="28" height="28" style="border-radius:6px;flex-shrink:0;" />
             <div style="min-width:0;">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(c.displayName)}</strong>
+                <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(serviceTitle)}</strong>
                 ${badge}
               </div>
-              <div class="text-faint" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subtitle}</div>
+              <div class="text-faint" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(subtitle)}</div>
             </div>
           </div>
           ${actionButtons}

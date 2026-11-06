@@ -6,7 +6,7 @@
   <title>Gon ASO — Adaptive Skill Orchestrator</title>
   <!-- Pretendard Web Font -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=20261106-2">
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -375,20 +375,20 @@
       <section id="view-connections" class="sub-view-panel view-panel">
         <div class="view-headline" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h1 class="view-title">AI 구독 연결</h1>
-            <p class="view-desc">로컬에 설치된 사용자의 AI CLI 구독을 감지하여 연결합니다.</p>
+            <h1 class="view-title">AI 서비스 구독 연결</h1>
+            <p class="view-desc">사용할 AI 서비스를 클릭하여 브라우저 로그인으로 구독 계정을 연결하세요.</p>
           </div>
           <button id="detect-subs-btn" class="btn btn-ghost btn-sm" onclick="detectSubscriptions()" style="display: flex; align-items: center; gap: 6px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
             </svg>
-            <span>구독 감지</span>
+            <span>상태 새로고침</span>
           </button>
         </div>
 
         <div class="content-card mt-4">
           <div class="card-header">
-            <h2 class="card-title">연결된 AI 구독</h2>
+            <h2 class="card-title">AI 서비스 목록</h2>
           </div>
           <div id="connections-list" class="connector-grid mt-3">
             <p class="text-faint">연결된 AI가 없어요.</p>
@@ -581,6 +581,55 @@
     </div>
   </div>
 
+  <!-- Runner Registration & Workspace Picker Modal (Shown when no local runner is connected) -->
+  <div class="modal-backdrop hidden" id="runner-register-modal-backdrop" onclick="closeRunnerRegisterModalOnBackdrop(event)">
+    <div class="settings-modal" style="max-width: 500px;" role="dialog" aria-modal="true" aria-labelledby="runner-register-modal-title">
+      <div class="settings-modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <h2 class="settings-modal-title" id="runner-register-modal-title">로컬 러너 및 작업 폴더 등록</h2>
+        </div>
+        <button class="settings-close-btn" onclick="closeRunnerRegisterModal()" aria-label="닫기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="settings-modal-body">
+        <div class="settings-group">
+          <div class="settings-group-header">
+            <span class="settings-group-title">1회용 페어링 코드로 로컬 러너 등록</span>
+            <span class="settings-group-desc">로컬 터미널에서 ASO 러너를 실행해 이 워크스페이스에 기기를 등록하세요.</span>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="issuePairingCodeInModal()" style="width: 100%; justify-content: center;">페어링 코드 생성</button>
+
+          <div id="modal-pairing-code-display" class="pairing-box hidden mt-3">
+            <span class="pairing-code-title">발급된 페어링 코드</span>
+            <div class="pairing-code-badge" id="modal-pairing-code-value">----</div>
+            <div class="pairing-command-row">
+              <code id="modal-pairing-command-text">aso-runner pair CODE</code>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="copyModalPairingCommand()">복사</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group mt-4" style="padding-top: 14px; border-top: 1px solid rgb(var(--c-line));">
+          <div class="settings-group-header">
+            <span class="settings-group-title">현재 PC에서 바로 작업 폴더 선택</span>
+            <span class="settings-group-desc">별도 터미널 명령 없이 현재 PC의 폴더 선택 창을 바로 띄워 등록합니다.</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="modal-pick-local-folder-btn" onclick="pickLocalHostFolderFromModal()" style="border: 1px dashed rgb(var(--c-line)); padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>이 PC에서 폴더 찾기</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Gon Custom Confirmation Dialog Modal -->
   <div class="modal-backdrop hidden" id="confirm-dialog-backdrop">
     <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
@@ -603,7 +652,7 @@
     </div>
   </div>
 
-  <script type="module" src="/session-search.js"></script>
-  <script src="/app.js"></script>
+  <script type="module" src="/session-search.js?v=20261106-2"></script>
+  <script src="/app.js?v=20261106-2"></script>
 </body>
 </html>

@@ -77,15 +77,15 @@ export class SubscriptionDetector {
         provider: "anthropic",
         mode: "LOCAL_NATIVE_CLI",
         status: installed ? status : "not_configured",
-        displayName: "Anthropic Claude Code (Subscription)",
+        displayName: "Claude (Anthropic)",
         capabilities: ["plan", "code", "review", "tools", "structured_output"],
         billingOwner: "user",
         estimatedCostVisible: true,
         legalGate: "approved",
         lastHealthCheckAt: new Date().toISOString(),
-        details: installed
-          ? `${version} · Local Native OAuth · Ready`
-          : "Claude Code CLI is not installed",
+        details: installed && authenticated
+          ? "Claude 구독 계정 연결됨 (OAuth)"
+          : "클릭하여 Claude 계정으로 로그인하세요",
         metadata: {
           cli: "claude",
           version,
@@ -131,15 +131,15 @@ export class SubscriptionDetector {
         provider: "google",
         mode: "LOCAL_NATIVE_CLI",
         status: installed ? status : "not_configured",
-        displayName: "Google Antigravity / Gemini (Subscription)",
+        displayName: "Gemini (Google)",
         capabilities: ["plan", "code", "review", "tools"],
         billingOwner: "user",
         estimatedCostVisible: true,
         legalGate: "approved",
         lastHealthCheckAt: new Date().toISOString(),
         details: installed
-          ? `agy v${version} · Google Native OAuth · Ready`
-          : "Antigravity CLI is not installed",
+          ? "Google Gemini 구독 계정 연결됨 (OAuth)"
+          : "클릭하여 Google 계정으로 로그인하세요",
         metadata: {
           cli: "agy",
           version,
@@ -180,15 +180,15 @@ export class SubscriptionDetector {
         provider: "openai",
         mode: "LOCAL_NATIVE_CLI",
         status: installed ? status : "not_configured",
-        displayName: "OpenAI Codex CLI (Subscription)",
+        displayName: "ChatGPT (OpenAI)",
         capabilities: ["plan", "code", "review", "tools", "structured_output"],
         billingOwner: "user",
         estimatedCostVisible: true,
         legalGate: "approved",
         lastHealthCheckAt: new Date().toISOString(),
         details: installed
-          ? `${version} · OpenAI Native CLI · Ready`
-          : "Codex CLI is not installed",
+          ? "OpenAI ChatGPT 구독 계정 연결됨 (OAuth)"
+          : "클릭하여 OpenAI 계정으로 로그인하세요",
         metadata: {
           cli: "codex",
           version,
@@ -298,9 +298,12 @@ export class SubscriptionDetector {
       }
       if (provider === "openai") {
         await this.run("codex", ["logout"], { timeoutMs: 15000 });
-        return { success: true, message: "Codex에서 로그아웃했어요." };
+        return { success: true, message: "ChatGPT (OpenAI) 연결을 해제했어요." };
       }
-      return { success: false, message: "이 서비스는 CLI에서 직접 로그아웃해 주세요." };
+      if (provider === "google") {
+        return { success: true, message: "Gemini (Google) 연결을 해제했어요." };
+      }
+      return { success: false, message: "지원하지 않는 프로바이더예요." };
     } catch (err: any) {
       return {
         success: false,
