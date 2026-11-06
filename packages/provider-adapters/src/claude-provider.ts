@@ -10,9 +10,11 @@ import {
 
 function claudeArgs(prompt: string, model?: string, effort?: Effort): string[] {
   return [
-    "-p", prompt, "--output-format", "json",
+    "-p", "--output-format", "json",
     ...(model ? ["--model", model] : []),
-    ...(effort ? ["--effort", effort] : [])
+    ...(effort ? ["--effort", effort] : []),
+    // `-p` is a boolean switch: "--" keeps a prompt that looks like a flag from being parsed as one.
+    "--", prompt
   ];
 }
 

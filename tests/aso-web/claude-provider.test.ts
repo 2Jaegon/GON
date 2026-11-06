@@ -25,7 +25,7 @@ describe("ClaudeProvider", () => {
       cwd: "C:\\x\\수업"
     });
     expect(calls[0].cmd).toBe("claude");
-    expect(calls[0].args).toEqual(["-p", 'a "b" & c | $(d)\nnext', "--output-format", "json", "--model", "opus", "--effort", "high"]);
+    expect(calls[0].args).toEqual(["-p", "--output-format", "json", "--model", "opus", "--effort", "high", "--", 'a "b" & c | $(d)\nnext']);
     expect(calls[0].opts.cwd).toBe("C:\\x\\수업");
     expect(r.output).toBe("hi");
     expect(r.usage.model).toBe("opus");
@@ -38,8 +38,22 @@ describe("ClaudeProvider", () => {
       return { stdout: '{"result":"hi"}', stderr: "" };
     });
     const r = await p.executeChat({ runId: RID, workspaceId: WID, prompt: "x" });
-    expect(calls[0].args).toEqual(["-p", "x", "--output-format", "json"]);
+    expect(calls[0].args).toEqual(["-p", "--output-format", "json", "--", "x"]);
     expect(r.usage.model).toBeNull();
+  });
+
+  it("keeps a flag-like prompt after '--' so it is never parsed as an option", async () => {
+    const calls: any[] = [];
+    const p = new ClaudeProvider(async (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return { stdout: '{"result":"hi"}', stderr: "" };
+    });
+    await p.executeChat({ runId: RID, workspaceId: WID, prompt: "--version", model: "opus" });
+    const args: string[] = calls[0].args;
+    const sep = args.indexOf("--");
+    expect(args[sep + 1]).toBe("--version");
+    expect(args.slice(0, sep)).not.toContain("--version");
+    expect(args[args.length - 1]).toBe("--version");
   });
 
   it("still maps usage_limit_reached errors carrying stdout", async () => {
@@ -69,7 +83,7 @@ describe("ClaudeProvider", () => {
       cwd: "C:\\proj"
     });
     expect(calls[0].cmd).toBe("claude");
-    expect(calls[0].args.slice(2)).toEqual(["--output-format", "json", "--model", "sonnet", "--effort", "low"]);
+    expect(calls[0].args.slice(0, -1)).toEqual(["-p", "--output-format", "json", "--model", "sonnet", "--effort", "low", "--"]);
     expect(calls[0].opts.cwd).toBe("C:\\proj");
     expect(r.output).toBe("done");
     expect(r.usage.model).toBe("sonnet");
@@ -101,5 +115,12 @@ describe("resolveCliCommand", () => {
     });
     expect(r.cmd).toBe(process.execPath);
     expect(r.prefixArgs).toEqual([`${NPM}\\node_modules\\@openai\\codex\\bin\\codex.js`]);
+  });
+
+  it("throws on win32 when nothing resolves, and does not cache the failure", async () => {
+    const empty = { where: async () => [] as string[], readShim: () => "" };
+    await expect(resolveCliCommand("nope-cli", "win32", empty)).rejects.toThrow("CLI not found: nope-cli");
+    const unparsable = { where: async () => [`${NPM}\\x.cmd`], readShim: () => "@echo off\r\nsomething else\r\n" };
+    await expect(resolveCliCommand("x", "win32", unparsable)).rejects.toThrow("CLI not found: x");
   });
 });

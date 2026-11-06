@@ -71,10 +71,11 @@ function resolveFromWhere(name: string, found: string[], readShim: (file: string
         if (/\.js$/i.test(target)) return { cmd: process.execPath, prefixArgs: [target] };
       }
     } catch {
-      // fall through to the bare name
+      // unparsable shim: handled below
     }
   }
-  return { cmd: name, prefixArgs: [] };
+  // Never fall back to the bare name on Windows: the child's cwd is searched before PATH.
+  throw new Error(`CLI not found: ${name}`);
 }
 
 export const defaultCliRunner: CliRunner = async (cmd, args, opts) => {
