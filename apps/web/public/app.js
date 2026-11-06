@@ -267,6 +267,8 @@ function groupRunsIntoSessions(runs) {
   });
 }
 
+let sidebarSearchQuery = "";
+
 function renderSidebarSessions(sessions) {
   cachedSessions = sessions || [];
   const list = document.getElementById("sidebar-runs-list");
@@ -279,12 +281,19 @@ function renderSidebarSessions(sessions) {
     return;
   }
 
-  list.innerHTML = sessions.map((s) => {
+  const q = sidebarSearchQuery.trim();
+  const visible = q && window.filterSessions ? window.filterSessions(sessions, q) : sessions;
+  if (visible.length === 0) {
+    list.innerHTML = `<div class="sidebar-runs-empty">검색 결과가 없어요</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map((s) => {
     const isActive = activeSessionId === s.id;
     return `
       <div class="sidebar-run-item-wrap ${isActive ? "active" : ""}">
         <button type="button" class="sidebar-run-item" onclick="viewSession('${s.id}')" title="${escapeHtml(s.title || '')}">
-          <span class="sidebar-run-title">${escapeHtml(s.title || '새 대화')}</span>
+          <span class="sidebar-run-title">${q && window.highlightMatch ? window.highlightMatch(s.title || '새 대화', q) : escapeHtml(s.title || '새 대화')}</span>
         </button>
         <button type="button" class="sidebar-run-delete-btn" onclick="deleteSession('${s.id}', event)" title="대화 세션 삭제" aria-label="대화 세션 삭제">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1071,13 +1080,38 @@ function switchNavTab(tabId) {
 }
 
 function focusSearchInput() {
-  switchTab("chat");
-  const input = document.getElementById("run-request-input");
-  if (input) {
-    input.focus();
-    input.select();
-  }
+  const input = document.getElementById("sidebar-search-input");
+  if (!input) return;
+  input.hidden = false;
+  input.focus();
+  input.select();
 }
+
+function closeSidebarSearch() {
+  const input = document.getElementById("sidebar-search-input");
+  if (input) {
+    input.value = "";
+    input.hidden = true;
+  }
+  sidebarSearchQuery = "";
+  renderSidebarSessions(cachedSessions);
+}
+
+(function initSidebarSearch() {
+  const input = document.getElementById("sidebar-search-input");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    sidebarSearchQuery = input.value;
+    if (input.value === "") {
+      closeSidebarSearch();
+      return;
+    }
+    renderSidebarSessions(cachedSessions);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSidebarSearch();
+  });
+})();
 
 function switchTab(tabId) {
   document.querySelectorAll(".nav-item").forEach((btn) => {

@@ -100,6 +100,7 @@
               <svg class="sidebar-toggle-chevron open" id="sidebar-runs-chevron" onclick="toggleSidebarRuns()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
           </div>
+          <input type="search" class="sidebar-search-input" id="sidebar-search-input" placeholder="최근 항목 검색" aria-label="최근 항목 검색" autocomplete="off" hidden>
           <div class="sidebar-runs-container" id="sidebar-runs-container">
             <div class="sidebar-runs-list" id="sidebar-runs-list">
               <div class="sidebar-runs-empty">최근 항목이 없습니다</div>
@@ -712,6 +713,7 @@
     </div>
   </div>
 
+  <script type="module" src="/session-search.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

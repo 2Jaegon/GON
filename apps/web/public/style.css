@@ -288,6 +288,29 @@ button {
   color: rgb(var(--c-ink));
 }
 
+.sidebar-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--c-line));
+  background-color: rgb(var(--c-surface));
+  color: rgb(var(--c-ink));
+  font-size: 0.82rem;
+}
+
+.sidebar-search-input:focus {
+  outline: none;
+  border-color: rgb(var(--c-accent));
+}
+
+.sidebar-run-title mark {
+  background-color: rgb(var(--c-accent-soft));
+  color: inherit;
+  border-radius: 2px;
+}
+
 /* --------------------------------------------------------------------------
    Sidebar Footer & Profile Dropdown Menu (Settings & Usage Ledger)
    -------------------------------------------------------------------------- */
