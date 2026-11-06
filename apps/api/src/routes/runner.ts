@@ -22,7 +22,6 @@ function syncLocalRunnerAllowedPath(dirPath: string) {
       const cleaned = Array.from(new Set(
         cfg.allowedPaths
           .map((p: string) => normalizePath(p))
-          .filter((p: string) => !p.includes("UsersaicamDesktop"))
       ));
       if (!cleaned.includes(normalized)) {
         cleaned.push(normalized);
@@ -77,13 +76,12 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
       return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
     }
     const device = toRunnerView(found);
-    const currentCwd = normalizePath(process.cwd());
     const allowed = (device.allowedPaths && device.allowedPaths.length > 0)
-      ? Array.from(new Set(device.allowedPaths.map(normalizePath).filter((p: string) => !p.includes("UsersaicamDesktop"))))
-      : [currentCwd];
-    const active = device.activePath && !device.activePath.includes("UsersaicamDesktop")
+      ? Array.from(new Set(device.allowedPaths.map(normalizePath)))
+      : [];
+    const active = device.activePath
       ? normalizePath(device.activePath)
-      : (allowed[0] || currentCwd);
+      : (allowed[0] || null);
 
     return {
       deviceId: device.id,

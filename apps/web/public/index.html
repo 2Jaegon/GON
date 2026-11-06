@@ -246,13 +246,12 @@
                   <input type="file" id="composer-file-input" style="display: none;" multiple accept="image/*,.txt,.md,.json,.ts,.js,.py,.pdf,.csv,.html,.css" onchange="handleFileSelected(event)" />
 
                   <!-- Desktop Workspace Directory Selector Pill Button -->
-                  <button type="button" class="pill-select-wrapper workspace-pill-btn" id="composer-folder-btn" onclick="openWorkspaceFolderModal()" title="데스크탑 작업 폴더 변경" style="cursor:pointer;font-family:inherit;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;">
+                  <button type="button" class="pill-select-wrapper workspace-pill-btn" id="composer-folder-btn" onclick="pickWorkspaceFolder()" title="데스크탑 작업 폴더 선택" style="cursor:pointer;font-family:inherit;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity:0.85;flex-shrink:0;">
                       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                     </svg>
-                    <span id="composer-folder-btn-label" style="font-size:0.75rem;font-weight:600;color:rgb(var(--c-ink));max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">gon</span>
+                    <span id="composer-folder-btn-label" style="font-size:0.75rem;font-weight:600;color:rgb(var(--c-ink));max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">작업 폴더</span>
                   </button>
-                  <input type="file" id="composer-folder-input" style="display: none;" webkitdirectory directory onchange="handleFolderPickerChange(event)" />
                 </div>
 
                 <div class="composer-bottom-right">
@@ -557,6 +556,40 @@
           </div>
         </div>
 
+        <!-- Workspace Folders Group -->
+        <div class="settings-group mt-5">
+          <div class="settings-group-header">
+            <span class="settings-group-title">작업 폴더</span>
+            <span class="settings-group-desc">AI 에이전트와 러너가 작업할 로컬 폴더를 관리합니다.</span>
+          </div>
+
+          <!-- Connected PC Device -->
+          <div id="settings-runner-device-info" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(var(--c-sunken), 0.5); border: 1px solid rgb(var(--c-line)); border-radius: 8px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              <strong id="settings-runner-name" style="font-size: 14px;">데스크탑 검색 중...</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge badge-accent" id="settings-runner-status">확인 중</span>
+              <button type="button" class="btn btn-ghost btn-sm text-danger" id="settings-runner-delete-btn" onclick="handleDeleteCurrentRunner()" title="이 데스크탑 러너 기기 등록 해제" style="font-size: 11px; color: rgb(var(--c-danger)); padding: 2px 8px; display: none;">기기 해제</button>
+            </div>
+          </div>
+
+          <!-- Allowed Folders List -->
+          <div class="settings-group-header" style="margin-top: 10px;">
+            <span class="settings-group-title" style="font-size: 13px;">허가된 폴더 목록</span>
+          </div>
+          <div id="settings-allowed-paths-list" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+            <span class="text-faint text-sm">등록된 폴더가 없어요</span>
+          </div>
+
+          <!-- Add Folder Button -->
+          <button type="button" class="btn btn-ghost btn-sm" onclick="pickWorkspaceFolder()" style="border: 1px dashed rgb(var(--c-line)); padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>폴더 추가</span>
+          </button>
+        </div>
+
         <!-- Orchestrator Governance Info -->
         <div class="settings-group mt-5">
           <div class="settings-group-header">
@@ -572,83 +605,6 @@
               <span class="info-label">스킬 라우팅</span>
               <span class="text-sub text-sm">최소 diff (ponytail) 기반 동적 선별</span>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Desktop Workspace Directory Picker Modal -->
-  <div class="modal-backdrop hidden" id="workspace-modal-backdrop" onclick="closeWorkspaceFolderModalOnBackdrop(event)">
-    <div class="settings-modal" style="max-width: 540px;" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
-      <div class="settings-modal-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-          </svg>
-          <h2 class="settings-modal-title" id="workspace-modal-title">데스크탑 작업 공간(Workspace) 선택</h2>
-        </div>
-        <button class="settings-close-btn" onclick="closeWorkspaceFolderModal()" aria-label="닫기">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-
-      <div class="settings-modal-body">
-        <!-- Target Desktop Device -->
-        <div class="settings-group">
-          <div class="settings-group-header">
-            <span class="settings-group-title">연결된 데스크탑</span>
-            <span class="settings-group-desc">로컬 러너가 구동 중인 PC 환경입니다.</span>
-          </div>
-          <div id="modal-runner-device-info" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(var(--c-sunken), 0.5); border: 1px solid rgb(var(--c-line)); border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-              <strong id="modal-runner-name" style="font-size: 14px;">데스크탑 검색 중...</strong>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="badge badge-accent" id="modal-runner-status">확인 중</span>
-              <button type="button" class="btn btn-ghost btn-sm text-danger" id="modal-runner-delete-btn" onclick="handleDeleteCurrentRunner()" title="이 데스크탑 러너 기기 등록 해제" style="font-size: 11px; color: rgb(var(--c-danger)); padding: 2px 8px; display: none;">기기 삭제</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Currently Selected Folder -->
-        <div class="settings-group mt-4">
-          <div class="settings-group-header">
-            <span class="settings-group-title">현재 활성 작업 폴더</span>
-            <span class="settings-group-desc">AI 에이전트와 러너가 코드 작성, 파일 읽기/수정을 실행할 로컬 디렉터리입니다.</span>
-          </div>
-          <div id="modal-active-path-box" style="padding: 10px 14px; background: rgba(var(--c-accent), 0.06); border: 1px solid rgba(var(--c-accent), 0.25); border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 13px;">
-            <span id="modal-active-path-text">설정된 경로 없음</span>
-          </div>
-        </div>
-
-        <!-- Allowed Folders List -->
-        <div class="settings-group mt-4">
-          <div class="settings-group-header">
-            <span class="settings-group-title">허가된 데스크탑 폴더 목록</span>
-            <span class="settings-group-desc">클릭 시 해당 디렉터리로 즉시 작업 공간이 전환됩니다.</span>
-          </div>
-          <div id="modal-allowed-paths-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto;">
-            <span class="text-faint text-sm">로딩 중...</span>
-          </div>
-        </div>
-
-        <!-- Add or Pick New Folder -->
-        <div class="settings-group mt-4">
-          <div class="settings-group-header">
-            <span class="settings-group-title">새 작업 폴더 추가 및 지정</span>
-            <span class="settings-group-desc">로컬 폴더를 직접 선택하거나 경로를 입력하여 권한을 부여하세요.</span>
-          </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="triggerNativeFolderPicker()" style="flex: 1; border: 1px dashed rgb(var(--c-line)); padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-              <span>브라우저에서 폴더 찾기</span>
-            </button>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="modal-new-path-input" class="clean-input" style="flex: 1; font-size: 13px;" placeholder="예: C:\Users\aicam\my-project" />
-            <button type="button" class="btn btn-primary btn-sm" onclick="submitNewWorkspacePath()" style="white-space: nowrap;">작업 공간으로 지정</button>
           </div>
         </div>
       </div>

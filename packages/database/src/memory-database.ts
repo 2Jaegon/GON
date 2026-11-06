@@ -323,7 +323,6 @@ export class MemoryDatabase implements IDatabase {
       r.allowedPaths = Array.from(new Set(
         r.allowedPaths
           .map((p) => p.replace(/\\+/g, "/"))
-          .filter((p) => !p.includes("UsersaicamDesktop"))
       ));
       if (!r.allowedPaths.includes(cleanPath)) {
         r.allowedPaths.push(cleanPath);
@@ -355,7 +354,6 @@ export class MemoryDatabase implements IDatabase {
       r.allowedPaths = Array.from(new Set(
         r.allowedPaths
           .map((p) => p.replace(/\\+/g, "/"))
-          .filter((p) => !p.includes("UsersaicamDesktop"))
       ));
       if (!r.allowedPaths.includes(cleanPath)) {
         r.allowedPaths.push(cleanPath);

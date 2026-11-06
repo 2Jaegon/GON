@@ -181,6 +181,7 @@ function openSettingsModal() {
   const modal = document.getElementById("settings-modal-backdrop");
   if (modal) {
     updateThemeModalUI(currentThemePref);
+    renderSettingsWorkspaceFolders();
     modal.classList.remove("hidden");
   }
 }
@@ -1323,10 +1324,6 @@ function normalizePath(p) {
 }
 
 let rawSavedActivePath = localStorage.getItem("gon.active_workspace_path") || "";
-if (rawSavedActivePath.includes("UsersaicamDesktop")) {
-  rawSavedActivePath = "";
-  try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
-}
 let currentActiveWorkspacePath = normalizePath(rawSavedActivePath);
 let currentRunnerDevice = null;
 let currentAllowedWorkspacePaths = [];
@@ -1342,14 +1339,10 @@ async function initWorkspaceFolderState() {
         const pathsRes = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
         if (pathsRes.ok) {
           const pathData = await pathsRes.json();
-          currentAllowedWorkspacePaths = (pathData.allowedPaths || [])
-            .map(normalizePath)
-            .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"));
+          currentAllowedWorkspacePaths = (pathData.allowedPaths || []).map(normalizePath).filter(Boolean);
           const serverActive = normalizePath(pathData.activePath);
           if (!currentActiveWorkspacePath || !currentAllowedWorkspacePaths.includes(currentActiveWorkspacePath)) {
-            currentActiveWorkspacePath = serverActive && !serverActive.includes("UsersaicamDesktop")
-              ? serverActive
-              : (currentAllowedWorkspacePaths[0] || "");
+            currentActiveWorkspacePath = serverActive || currentAllowedWorkspacePaths[0] || "";
             try {
               localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
             } catch {}
@@ -1389,52 +1382,68 @@ function renderWorkspaceChip() {
   }
 }
 
-async function openWorkspaceFolderModal() {
-  const backdrop = document.getElementById("workspace-modal-backdrop");
-  if (backdrop) backdrop.classList.remove("hidden");
+async function pickWorkspaceFolder() {
+  const btn = document.getElementById("composer-folder-btn");
+  const labelEl = document.getElementById("composer-folder-btn-label");
+  if (btn) btn.disabled = true;
+  if (labelEl) labelEl.textContent = "폴더 고르는 중…";
 
-  // Fetch fresh paths and runner device
-  if (currentWorkspaceId) {
-    try {
-      const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.items && data.items.length > 0) {
-          currentRunnerDevice = data.items[0];
-          const pathsRes = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
-          if (pathsRes.ok) {
-            const pData = await pathsRes.json();
-            currentAllowedWorkspacePaths = (pData.allowedPaths || [])
-              .map(normalizePath)
-              .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"));
-            const sActive = normalizePath(pData.activePath);
-            if (sActive && !sActive.includes("UsersaicamDesktop")) {
-              currentActiveWorkspacePath = sActive;
-            }
-          }
-        } else {
-          currentRunnerDevice = null;
-          currentAllowedWorkspacePaths = [];
-          currentActiveWorkspacePath = "";
-          try { localStorage.removeItem("gon.active_workspace_path"); } catch {}
-        }
+  try {
+    if (!currentWorkspaceId || !currentRunnerDevice) {
+      await loadRunners();
+    }
+
+    if (!currentRunnerDevice) {
+      showToast("PC의 러너를 켜 주세요", "info");
+      switchNavTab("runners");
+      return;
+    }
+
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
+      method: "POST"
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 200) {
+      if (data.activePath) {
+        currentActiveWorkspacePath = normalizePath(data.activePath);
+        currentAllowedWorkspacePaths = (data.allowedPaths || []).map(normalizePath);
+        try {
+          localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
+        } catch {}
+        renderWorkspaceChip();
+        renderSettingsWorkspaceFolders();
       }
-    } catch {}
+    } else if (res.status === 409) {
+      showToast("PC의 러너를 켜 주세요", "info");
+      switchNavTab("runners");
+    } else if (res.status === 422 || res.status === 504) {
+      showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
+    } else {
+      showToast(data.error?.message || "폴더 선택 실패", "error");
+    }
+  } catch (err) {
+    showToast("폴더 선택 오류: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+    renderWorkspaceChip();
   }
+}
 
-  // Populate Modal UI
-  const nameEl = document.getElementById("modal-runner-name");
-  const statusEl = document.getElementById("modal-runner-status");
-  const deleteBtn = document.getElementById("modal-runner-delete-btn");
+function renderSettingsWorkspaceFolders() {
+  const nameEl = document.getElementById("settings-runner-name");
+  const statusEl = document.getElementById("settings-runner-status");
+  const deleteBtn = document.getElementById("settings-runner-delete-btn");
+
   if (currentRunnerDevice) {
     if (nameEl) nameEl.textContent = currentRunnerDevice.name;
     if (statusEl) {
-      statusEl.textContent = currentRunnerDevice.status === "online" ? "온라인 (정상 연결됨)" : "오프라인";
+      statusEl.textContent = currentRunnerDevice.status === "online" ? "온라인" : "오프라인";
       statusEl.className = `badge ${currentRunnerDevice.status === "online" ? "badge-accent" : "badge-sub"}`;
     }
     if (deleteBtn) deleteBtn.style.display = "inline-flex";
   } else {
-    if (nameEl) nameEl.textContent = "연결된 러너 없음 (페어링 필요)";
+    if (nameEl) nameEl.textContent = "연결된 PC가 없어요";
     if (statusEl) {
       statusEl.textContent = "미등록";
       statusEl.className = "badge badge-sub";
@@ -1442,20 +1451,13 @@ async function openWorkspaceFolderModal() {
     if (deleteBtn) deleteBtn.style.display = "none";
   }
 
-  const activeBox = document.getElementById("modal-active-path-text");
-  if (activeBox) {
-    activeBox.textContent = currentActiveWorkspacePath ? normalizePath(currentActiveWorkspacePath) : "지정된 로컬 작업 공간이 없습니다.";
-  }
-
-  const listEl = document.getElementById("modal-allowed-paths-list");
+  const listEl = document.getElementById("settings-allowed-paths-list");
   if (listEl) {
     const cleanPaths = Array.from(new Set(
-      (currentAllowedWorkspacePaths || [])
-        .map(normalizePath)
-        .filter(p => Boolean(p) && !p.includes("UsersaicamDesktop"))
+      (currentAllowedWorkspacePaths || []).map(normalizePath).filter(Boolean)
     ));
     if (cleanPaths.length === 0) {
-      listEl.innerHTML = `<span class="text-faint text-sm">등록된 허가 폴더가 없습니다. 아래에서 추가하세요.</span>`;
+      listEl.innerHTML = `<span class="text-faint text-sm">등록된 폴더가 없어요</span>`;
     } else {
       listEl.innerHTML = cleanPaths.map(p => {
         const isActive = p === normalizePath(currentActiveWorkspacePath);
@@ -1473,17 +1475,6 @@ async function openWorkspaceFolderModal() {
         `;
       }).join("");
     }
-  }
-}
-
-function closeWorkspaceFolderModal() {
-  const backdrop = document.getElementById("workspace-modal-backdrop");
-  if (backdrop) backdrop.classList.add("hidden");
-}
-
-function closeWorkspaceFolderModalOnBackdrop(event) {
-  if (event.target.id === "workspace-modal-backdrop") {
-    closeWorkspaceFolderModal();
   }
 }
 
@@ -1506,7 +1497,7 @@ async function selectWorkspacePath(dirPath) {
   }
 
   renderWorkspaceChip();
-  closeWorkspaceFolderModal();
+  renderSettingsWorkspaceFolders();
 }
 
 async function removeWorkspacePath(dirPath) {
@@ -1526,7 +1517,7 @@ async function removeWorkspacePath(dirPath) {
         try { localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath); } catch {}
       }
       renderWorkspaceChip();
-      await openWorkspaceFolderModal();
+      renderSettingsWorkspaceFolders();
       showToast("작업 공간 폴더가 제거되었습니다.", "info");
     }
   } catch (err) {
@@ -1565,84 +1556,13 @@ async function deleteRunnerDevice(deviceId, deviceName) {
         renderWorkspaceChip();
       }
       await loadRunners();
-      const backdrop = document.getElementById("workspace-modal-backdrop");
-      if (backdrop && !backdrop.classList.contains("hidden")) {
-        await openWorkspaceFolderModal();
-      }
+      renderSettingsWorkspaceFolders();
     } else {
       const err = await res.json().catch(() => ({}));
       showToast("기기 등록 해제 실패: " + (err.error?.message || res.statusText), "error");
     }
   } catch (e) {
     showToast("기기 등록 해제 오류: " + e.message, "error");
-  }
-}
-
-async function submitNewWorkspacePath() {
-  const input = document.getElementById("modal-new-path-input");
-  const rawVal = input ? input.value.trim() : "";
-  if (!rawVal) {
-    alert("데스크탑 폴더 경로를 입력하세요.");
-    return;
-  }
-  const pathVal = normalizePath(rawVal);
-
-  if (!currentWorkspaceId || !currentRunnerDevice) {
-    selectWorkspacePath(pathVal);
-    if (input) input.value = "";
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: pathVal, setAsActive: true })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      currentAllowedWorkspacePaths = (data.allowedPaths || []).map(normalizePath);
-      selectWorkspacePath(pathVal);
-      if (input) input.value = "";
-    } else {
-      const err = await res.json();
-      alert("폴더 등록 실패: " + (err.error?.message || res.statusText));
-    }
-  } catch (e) {
-    alert("폴더 등록 오류: " + e.message);
-  }
-}
-
-async function triggerNativeFolderPicker() {
-  if (window.showDirectoryPicker) {
-    try {
-      const dirHandle = await window.showDirectoryPicker();
-      if (dirHandle && dirHandle.name) {
-        const input = document.getElementById("modal-new-path-input");
-        if (input) {
-          input.value = dirHandle.name;
-          input.focus();
-        }
-      }
-      return;
-    } catch (e) {
-      return;
-    }
-  }
-  const fileInput = document.getElementById("composer-folder-input");
-  if (fileInput) fileInput.click();
-}
-
-function handleFolderPickerChange(event) {
-  const files = event.target.files;
-  if (files && files.length > 0) {
-    const rel = files[0].webkitRelativePath || "";
-    const folderName = rel.split("/")[0] || files[0].name;
-    const input = document.getElementById("modal-new-path-input");
-    if (input) {
-      input.value = folderName;
-      input.focus();
-    }
   }
 }
 
@@ -2656,6 +2576,11 @@ async function loadRunners() {
   const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
   if (res.ok) {
     const data = await res.json();
+    if (data.items && data.items.length > 0) {
+      currentRunnerDevice = data.items[0];
+    } else {
+      currentRunnerDevice = null;
+    }
     const list = document.getElementById("runners-list");
     if (!list) return;
     if (data.items.length === 0) {
@@ -2673,7 +2598,7 @@ async function loadRunners() {
               <span class="badge ${r.status === "online" ? "badge-accent" : "badge-sub"}" style="margin-left:8px;">${r.status}</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <button class="btn btn-sm btn-ghost" onclick="openWorkspaceFolderModal()" style="font-size:12px;">작업 공간 관리</button>
+              <button class="btn btn-sm btn-ghost" onclick="openSettingsModal()" style="font-size:12px;">작업 공간 관리</button>
               <button class="btn btn-sm btn-ghost text-danger" onclick="deleteRunnerDevice('${escapeHtml(r.id)}', '${escapeHtml(r.name)}')" style="font-size:12px;color:rgb(var(--c-danger));">기기 등록 해제</button>
             </div>
           </div>
