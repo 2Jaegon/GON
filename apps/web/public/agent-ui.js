@@ -74,8 +74,17 @@ export function agentApprovalCardHtml(runId, ev) {
   `.trim();
 }
 
+export function grillingBadgeHtml(state) {
+  const safeState = escapeHtml(state || "asking");
+  if (state === "answered") {
+    return `<div class="grilling-badge answered" data-state="${safeState}"><span class="grilling-dot"></span>Grilling 완료</div>`;
+  }
+  return `<div class="grilling-badge asking" data-state="${safeState}"><span class="grilling-spinner"></span>Grilling · 요구사항 다듬는 중</div>`;
+}
+
 if (typeof window !== "undefined") {
   window.agentToolRowHtml = agentToolRowHtml;
   window.agentApprovalCardHtml = agentApprovalCardHtml;
+  window.grillingBadgeHtml = grillingBadgeHtml;
 }
 

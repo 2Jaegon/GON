@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 // @ts-expect-error plain browser ES module without types
-import { agentToolRowHtml, agentApprovalCardHtml } from "../../apps/web/public/agent-ui.js";
+import { agentToolRowHtml, agentApprovalCardHtml, grillingBadgeHtml } from "../../apps/web/public/agent-ui.js";
 
 describe("agent-ui HTML builders", () => {
   it("escapes html in tool row name and summary", () => {
@@ -78,5 +78,25 @@ describe("agent-ui HTML builders", () => {
     expect(html).toContain("resolveAgentApproval('run-002', 'deny')");
     expect(html).toContain("이번만 허용");
     expect(html).toContain("거절");
+  });
+
+  describe("grillingBadgeHtml", () => {
+    it("renders asking badge with proper wording and class", () => {
+      const html = grillingBadgeHtml("asking");
+      expect(html).toContain("Grilling · 요구사항 다듬는 중");
+      expect(html).toContain("asking");
+    });
+
+    it("renders answered badge with proper wording and class", () => {
+      const html = grillingBadgeHtml("answered");
+      expect(html).toContain("Grilling 완료");
+      expect(html).toContain("answered");
+    });
+
+    it("escapes unexpected state safely", () => {
+      const html = grillingBadgeHtml('<script>alert("xss")</script>');
+      expect(html).not.toContain("<script>");
+      expect(html).toContain("&lt;script&gt;");
+    });
   });
 });

@@ -3250,3 +3250,42 @@ button {
   border-radius: 8px;
   object-fit: contain;
 }
+
+.grilling-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
+}
+
+.grilling-badge.asking {
+  background: rgba(245, 158, 11, 0.12);
+  color: rgb(217, 119, 6);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.grilling-badge.answered {
+  background: rgba(16, 185, 129, 0.12);
+  color: rgb(5, 150, 105);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.grilling-spinner {
+  width: 9px;
+  height: 9px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: agent-spin 0.8s linear infinite;
+}
+
+.grilling-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}

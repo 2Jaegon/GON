@@ -2716,6 +2716,7 @@ async function submitChatPrompt() {
         <!-- Agent Tool Steps & Approvals -->
         <div class="agent-steps hidden" id="agent-steps-${tempId}"></div>
         <div class="agent-approval-container hidden" id="agent-approval-container-${tempId}"></div>
+        <div class="grilling-badge-container" id="grilling-badge-${tempId}"></div>
 
         <!-- Assistant Response Text (Clean Markdown without box border) -->
         <div class="report-viewer" id="response-${tempId}">
@@ -2814,7 +2815,7 @@ function rebindTurnIds(oldId, newId) {
     "drawer-", "sec-req-", "req-content-", "sec-tasks-",
     "tasks-content-", "gate-", "term-", "sec-diff-",
     "diff-content-", "response-", "agent-steps-",
-    "agent-approval-container-", "turn-actions-", "btn-stop-"
+    "agent-approval-container-", "grilling-badge-", "turn-actions-", "btn-stop-"
   ];
 
   prefixes.forEach((prefix) => {
@@ -2940,6 +2941,17 @@ function connectRunSSE(runId) {
       updateTurnStatus(runId, "도구 실행 계속 진행 중...", true);
     } catch {}
     appendLog("agent:approval_resolved", e.data);
+  });
+
+  activeEventSource.addEventListener("agent:grilling", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      const badgeEl = document.getElementById(`grilling-badge-${runId}`);
+      if (badgeEl && window.grillingBadgeHtml) {
+        badgeEl.innerHTML = window.grillingBadgeHtml(payload.state || "asking");
+      }
+    } catch {}
+    appendLog("agent:grilling", e.data);
   });
 
   activeEventSource.addEventListener("run:cancelled", (e) => {
