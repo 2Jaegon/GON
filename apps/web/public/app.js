@@ -1508,18 +1508,8 @@ async function loadProjects() {
   const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects`);
   if (res.ok) {
     const data = await res.json();
-    const select = document.getElementById("run-project-select");
-    if (select) {
-      select.innerHTML = "";
-      data.items.forEach((p) => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = `${p.name} (${p.sourceType})`;
-        select.appendChild(opt);
-      });
-      if (data.items.length > 0) {
-        currentProjectId = data.items[0].id;
-      }
+    if (data.items.length > 0) {
+      currentProjectId = data.items[0].id;
     }
   }
 }

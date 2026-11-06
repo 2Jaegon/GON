@@ -5,6 +5,7 @@
 
 :root {
   color-scheme: light;
+  --chat-width: 768px;
   --c-ground: 250, 249, 245;
   /* #FAF9F5 Warm Paper Ground */
   --c-surface: 255, 255, 255;
@@ -1031,7 +1032,7 @@ button {
 /* Composer Container */
 .chat-viewport.empty-mode .composer-container {
   width: 100%;
-  max-width: 740px;
+  max-width: calc(var(--chat-width) + 48px);
   padding: 0 24px;
   background: transparent;
 }
@@ -1043,12 +1044,13 @@ button {
 }
 
 .chat-viewport:not(.empty-mode) .composer-wrapper {
-  max-width: 768px;
+  width: 100%;
+  max-width: var(--chat-width);
   margin: 0 auto;
 }
 
 .chat-thread {
-  max-width: 768px;
+  max-width: var(--chat-width);
   width: 100%;
   margin: 0 auto;
   display: flex;
