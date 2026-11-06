@@ -389,15 +389,15 @@ expect(parseClaudeAuthStatus('{"loggedIn":true,"subscriptionType":"pro"}')).toEq
   - 로그인 성공 시 사용자의 워크스페이스에 프로젝트가 0개면 기본 프로젝트 생성. 워크스페이스 목록은 지금처럼 전부 반환(단일 소유자 — 기존 Default Workspace를 그대로 이어받음).
   - `helpers/auth.ts`: `createAuthedServer(opts?) → { server, db, inject(opts) }` — 가짜 `verifyIdToken`과 `allowedEmails: ["owner@test.local"]`로 로그인해 쿠키를 붙여 주는 `inject`.
 
-- [ ] **Step 1: 실패 테스트** (`verifyGoogleIdToken`은 가짜 `fetchFn`으로)
+- [x] **Step 1: 실패 테스트** (`verifyGoogleIdToken`은 가짜 `fetchFn`으로)
   - `aud` 다름 / `exp` 지남 / `email_verified: "false"` → throw
   - 허용 목록 밖 이메일 → 403, 허용 목록 비었을 때 → 403
   - 쿠키 없이 `GET /api/v1/workspaces` → 401; 로그인 후 → 200; 로그아웃 후 같은 쿠키 → 401
   - 만료 시각이 지난 세션 → 401
   - `Set-Cookie`에 `HttpOnly`, `SameSite=Lax`; 응답 본문 어디에도 토큰 원문 없음
   - `OPTIONS` 응답의 Allow-Origin이 `*`가 아님
-- [ ] **Step 2:** FAIL. **Step 3:** 구현 + 기존 테스트를 `createAuthedServer`로 전환. **Step 4:** `npm test` 전체 PASS.
-- [ ] **Step 5: Commit** `feat(api): google sign-in with allow-list and session cookie`
+- [x] **Step 2:** FAIL. **Step 3:** 구현 + 기존 테스트를 `createAuthedServer`로 전환. **Step 4:** `npm test` 전체 PASS.
+- [x] **Step 5: Commit** `feat(api): google sign-in with allow-list and session cookie`
 
 ---
 
@@ -413,9 +413,9 @@ expect(parseClaudeAuthStatus('{"loggedIn":true,"subscriptionType":"pro"}')).toEq
 - 로그인 화면: `GET /auth/config`의 Client ID로 GIS 버튼 렌더(`https://accounts.google.com/gsi/client`), 콜백 credential을 `POST /auth/google`. 403이면 "허용되지 않은 계정이에요", Client ID 없으면 "GOOGLE_CLIENT_ID를 .env에 넣어 주세요".
 - 프로필 메뉴에 "로그아웃".
 
-- [ ] **Step 1:** 구현. **Step 2:** `node --check`.
-- [ ] **Step 3:** 사용자 준비물 확인 후 브라우저 확인: (a) Google Console에 `http://localhost:3000` 원본 추가, (b) `.env`에 `GOOGLE_CLIENT_ID`·`ALLOWED_EMAILS`. 로그인 → 앱 진입 → 로그아웃 → 로그인 화면. 허용 안 된 계정 → 안내 문구. 준비물이 없으면 이 단계는 unverified로 보고.
-- [ ] **Step 4: Commit** `feat(web): login screen with Google sign-in`
+- [x] **Step 1:** 구현. **Step 2:** `node --check`.
+- [x] **Step 3:** 사용자 준비물 확인 후 브라우저 확인: (a) Google Console에 `http://localhost:3000` 원본 추가, (b) `.env`에 `GOOGLE_CLIENT_ID`·`ALLOWED_EMAILS`. 로그인 → 앱 진입 → 로그아웃 → 로그인 화면. 허용 안 된 계정 → 안내 문구. 준비물이 없으면 이 단계는 unverified로 보고.
+- [x] **Step 4: Commit** `feat(web): login screen with Google sign-in`
 
 ---
 
@@ -431,10 +431,10 @@ expect(parseClaudeAuthStatus('{"loggedIn":true,"subscriptionType":"pro"}')).toEq
 - `GET /api/v1/skills` → `{ items: Array<{ id: string; name: string; description: string; source: string }> }` — `config/skill-catalog.json`을 매 요청 읽어서 변환(빌더가 파일의 실제 필드 이름에 맞춰 매핑). 파일이 없거나 깨졌으면 500이 아니라 `{ items: [] }` + 서버 로그.
 - 화면: 카드 = `name` + `description` + `source` 배지. 0개면 "등록된 스킬이 없어요".
 
-- [ ] **Step 1: 실패 테스트**: `GET /api/v1/skills` 응답에 `id === "mattpocock-skills:grilling"` 포함 / 카탈로그 경로를 없는 파일로 주면 `items: []`.
-- [ ] **Step 2:** FAIL. **Step 3:** 구현. **Step 4:** PASS.
-- [ ] **Step 5:** 브라우저: 사이드바 "스킬" → grilling·superpowers 카드가 보임.
-- [ ] **Step 6: Commit** `feat(web): skill catalog from config`
+- [x] **Step 1: 실패 테스트**: `GET /api/v1/skills` 응답에 `id === "mattpocock-skills:grilling"` 포함 / 카탈로그 경로를 없는 파일로 주면 `items: []`.
+- [x] **Step 2:** FAIL. **Step 3:** 구현. **Step 4:** PASS.
+- [x] **Step 5:** 브라우저: 사이드바 "스킬" → grilling·superpowers 카드가 보임.
+- [x] **Step 6: Commit** `feat(web): skill catalog from config`
 
 후속(이 계획 밖, 별도 설계): 웹에서 작업 요청 시 계획 전에 grilling식 질문(추천 답 포함) 라운드 — 사용자 결정 2026-11-06.
 
@@ -442,7 +442,7 @@ expect(parseClaudeAuthStatus('{"loggedIn":true,"subscriptionType":"pro"}')).toEq
 
 ### Task 16: 마무리 검증
 
-- [ ] **Step 1:** `npm run build` 성공, `npm test` 전체 통과(숫자 그대로 보고).
-- [ ] **Step 2:** `ecc:security-reviewer`로 Task 1·4·9·10·13 변경 검토 → 지적 사항 수정.
-- [ ] **Step 3:** 브라우저 끝까지 한 번: 로그인 → 폴더 선택 → 모델 선택 → 채팅 → 최근 항목 검색 → 로그아웃. 못 한 단계는 unverified.
-- [ ] **Step 4:** Task 2에서 모은 "핸들러 없는 버튼" 목록을 사용자에게 보고.
+- [x] **Step 1:** `npm run build` 성공, `npm test` 전체 통과(숫자 그대로 보고).
+- [x] **Step 2:** `ecc:security-reviewer`로 Task 1·4·9·10·13 변경 검토 → 지적 사항 수정.
+- [x] **Step 3:** 브라우저 끝까지 한 번: 로그인 → 폴더 선택 → 모델 선택 → 채팅 → 최근 항목 검색 → 로그아웃. 못 한 단계는 unverified.
+- [x] **Step 4:** Task 2에서 모은 "핸들러 없는 버튼" 목록을 사용자에게 보고.
