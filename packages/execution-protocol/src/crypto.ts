@@ -5,6 +5,16 @@ export function generateNonce(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+export function signChallenge(secret: string, nonce: string): string {
+  return crypto.createHmac("sha256", secret).update(nonce).digest("hex");
+}
+
+export function verifyChallenge(secret: string, nonce: string, signature: string): boolean {
+  const expected = Buffer.from(signChallenge(secret, nonce));
+  const actual = Buffer.from(signature);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
 export function computeContractSignature(
   contractPayload: Omit<SignedJobContract, "signature">,
   secretKey: string

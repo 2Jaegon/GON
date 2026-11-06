@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server as HttpServer } from "node:http";
 import { IDatabase } from "@aso/database";
-import { generateNonce, RunnerMessage } from "@aso/execution-protocol";
+import { generateNonce, verifyChallenge, RunnerMessage } from "@aso/execution-protocol";
 
 export class RunnerGateway {
   private wss: WebSocketServer | null = null;
@@ -29,12 +29,20 @@ export class RunnerGateway {
           const msg = JSON.parse(data.toString()) as RunnerMessage;
 
           if (msg.type === "AUTH_REQUEST") {
-            const { deviceId } = msg.payload;
-            const device = await this.db.runners.findById(deviceId);
-            if (!device) {
-              ws.send(JSON.stringify({ type: "AUTH_FAILURE", payload: { error: "Unknown device" } }));
+            const { deviceId, nonce: echoedNonce, signature } = msg.payload;
+            const reject = (error: string) => {
+              ws.send(JSON.stringify({ type: "AUTH_FAILURE", payload: { error } }));
               ws.close();
-              return;
+            };
+            const device = await this.db.runners.findById(deviceId);
+            if (!device) return reject("Unknown device");
+            if (!device.authSecret) return reject("인증 정보가 없는 기기예요. 다시 페어링해 주세요.");
+            if (
+              echoedNonce !== nonce ||
+              typeof signature !== "string" ||
+              !verifyChallenge(device.authSecret, nonce, signature)
+            ) {
+              return reject("Authentication failed");
             }
 
             authenticatedDeviceId = deviceId;

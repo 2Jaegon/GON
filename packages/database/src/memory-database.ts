@@ -296,6 +296,7 @@ export class MemoryDatabase implements IDatabase {
         workspaceId: pairing.workspaceId,
         name: deviceName,
         publicKey,
+        authSecret: crypto.randomBytes(32).toString("hex"),
         status: "online",
         allowedPaths: [],
         activePath: null,

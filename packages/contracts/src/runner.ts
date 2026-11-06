@@ -8,6 +8,7 @@ export const RunnerDeviceSchema = z.object({
   workspaceId: z.string().uuid(),
   name: z.string(),
   publicKey: z.string(),
+  authSecret: z.string().optional(),
   status: RunnerStatusSchema.default("offline"),
   allowedPaths: z.array(z.string()).default([]),
   activePath: z.string().nullable().optional(),
@@ -16,6 +17,11 @@ export const RunnerDeviceSchema = z.object({
   createdAt: z.string().datetime()
 });
 export type RunnerDevice = z.infer<typeof RunnerDeviceSchema>;
+
+export function toRunnerView(device: RunnerDevice): Omit<RunnerDevice, "authSecret"> {
+  const { authSecret: _authSecret, ...view } = device;
+  return view;
+}
 
 export const RunnerPairingCodeSchema = z.object({
   id: z.string().uuid(),

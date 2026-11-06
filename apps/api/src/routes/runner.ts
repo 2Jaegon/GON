@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
-import { RedeemPairingDTOSchema, GrantPathDTOSchema } from "@aso/contracts";
+import { RedeemPairingDTOSchema, GrantPathDTOSchema, toRunnerView } from "@aso/contracts";
 import { RunnerGateway } from "../services/runner-gateway.js";
 
 function normalizePath(rawPath: string): string {
@@ -54,6 +54,7 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
         status: device.status,
         allowedPaths: device.allowedPaths,
         activePath: device.activePath,
+        authSecret: device.authSecret,
         message: "Runner device successfully registered and paired"
       });
     } catch (err: any) {
@@ -65,16 +66,17 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
   server.get("/api/v1/workspaces/:workspaceId/runners", async (req) => {
     const { workspaceId } = req.params as { workspaceId: string };
     const list = await db.runners.listForWorkspace(workspaceId);
-    return { items: list };
+    return { items: list.map(toRunnerView) };
   });
 
   // Get allowed workspace paths for a runner device
   server.get("/api/v1/workspaces/:workspaceId/runners/:deviceId/paths", async (req, reply) => {
     const { deviceId } = req.params as { deviceId: string };
-    const device = await db.runners.findById(deviceId);
-    if (!device) {
+    const found = await db.runners.findById(deviceId);
+    if (!found) {
       return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
     }
+    const device = toRunnerView(found);
     const currentCwd = normalizePath(process.cwd());
     const allowed = (device.allowedPaths && device.allowedPaths.length > 0)
       ? Array.from(new Set(device.allowedPaths.map(normalizePath).filter((p: string) => !p.includes("UsersaicamDesktop"))))
@@ -100,10 +102,11 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
     // Sync to local runner agent config
     syncLocalRunnerAllowedPath(resolved);
 
-    const updated = await db.runners.addAllowedPath(deviceId, resolved, dto.setAsActive ?? true);
-    if (!updated) {
+    const updatedDevice = await db.runners.addAllowedPath(deviceId, resolved, dto.setAsActive ?? true);
+    if (!updatedDevice) {
       return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
     }
+    const updated = toRunnerView(updatedDevice);
 
     return reply.status(200).send({
       deviceId: updated.id,
@@ -122,10 +125,11 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
 
     syncLocalRunnerAllowedPath(resolved);
 
-    const updated = await db.runners.setActivePath(deviceId, resolved);
-    if (!updated) {
+    const updatedDevice = await db.runners.setActivePath(deviceId, resolved);
+    if (!updatedDevice) {
       return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
     }
+    const updated = toRunnerView(updatedDevice);
 
     return reply.status(200).send({
       deviceId: updated.id,
@@ -143,10 +147,11 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
       return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Path is required" } });
     }
     const clean = normalizePath(dirPath);
-    const updated = await db.runners.removeAllowedPath(deviceId, clean);
-    if (!updated) {
+    const updatedDevice = await db.runners.removeAllowedPath(deviceId, clean);
+    if (!updatedDevice) {
       return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Runner device not found" } });
     }
+    const updated = toRunnerView(updatedDevice);
 
     // Sync to local runner config
     try {

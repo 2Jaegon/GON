@@ -48,6 +48,7 @@ program
         workspaceId: data.workspaceId,
         deviceName: options.name,
         secretKey,
+        authSecret: data.authSecret,
         serverUrl: options.server,
         allowedPaths: [process.cwd()]
       });
@@ -86,18 +87,9 @@ program
   .option("-s, --server <url>", "Override server URL")
   .action(async (options) => {
     let cfg = loadRunnerConfig();
-    if (!cfg) {
-      // In development, create auto-paired local config if missing
-      console.log("[Notice] No pairing found. Auto-configuring dev local runner...");
-      cfg = {
-        deviceId: crypto.randomUUID(),
-        workspaceId: "00000000-0000-0000-0000-000000000002",
-        deviceName: `${os.hostname()}-dev`,
-        secretKey: "dev-runner-secret-key-32-bytes",
-        serverUrl: options.server || "http://127.0.0.1:4000",
-        allowedPaths: [process.cwd()]
-      };
-      saveRunnerConfig(cfg);
+    if (!cfg || !cfg.authSecret) {
+      console.error("인증 정보가 없어요. 다시 페어링해 주세요: aso-runner pair <코드>");
+      process.exit(1);
     }
 
     if (options.server) {

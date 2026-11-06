@@ -1,7 +1,7 @@
 import { WebSocket } from "ws";
 import { RunnerLocalConfig } from "./config.js";
 import { JobExecutor } from "./executor.js";
-import { RunnerMessage } from "@aso/execution-protocol";
+import { RunnerMessage, signChallenge } from "@aso/execution-protocol";
 
 export class RunnerClient {
   private ws: WebSocket | null = null;
@@ -14,6 +14,11 @@ export class RunnerClient {
 
   public connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (!this.config.authSecret) {
+        console.error("[Runner] 인증 정보가 없어요. 다시 페어링해 주세요: aso-runner pair <코드>");
+        reject(new Error("authSecret missing"));
+        return;
+      }
       const wsUrl = this.config.serverUrl.replace(/^http/, "ws") + "/api/v1/runner/ws";
       console.log(`[Runner] Connecting to ${wsUrl}...`);
 
@@ -39,7 +44,7 @@ export class RunnerClient {
               payload: {
                 deviceId: this.config.deviceId,
                 nonce,
-                signature: "device-auth-signature"
+                signature: signChallenge(this.config.authSecret, nonce)
               }
             };
             this.ws?.send(JSON.stringify(authMsg));

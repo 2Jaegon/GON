@@ -7,6 +7,7 @@ export interface RunnerLocalConfig {
   workspaceId: string;
   deviceName: string;
   secretKey: string;
+  authSecret: string;
   serverUrl: string;
   allowedPaths: string[];
 }
