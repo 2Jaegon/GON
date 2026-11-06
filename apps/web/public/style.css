@@ -858,15 +858,13 @@ button {
 }
 
 /* ==========================================================================
-   Direct Chat Viewport (Claude & side_pj 2-Split Orchestrator Floor Architecture)
-   Top: Live Real-Time Dot Cobweb Nexus Visualizer
-   Bottom: Conversational Thread & Expandable Composer Panel
+   Direct Chat Viewport (Main Full-Height Chat + Right Graph Sidebar)
    ========================================================================== */
 
 .chat-viewport {
   flex: 1;
   display: none;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   position: relative;
   overflow: hidden;
@@ -877,63 +875,92 @@ button {
   display: flex;
 }
 
+/* Floating Right Graph Sidebar Toggle Button */
+.floating-graph-toggle {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 40;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background-color: rgb(var(--c-surface));
+  border: 1px solid rgb(var(--c-line));
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: rgb(var(--c-sub));
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: all 120ms ease;
+}
+
+.floating-graph-toggle:hover {
+  background-color: rgb(var(--c-raised));
+  color: rgb(var(--c-ink));
+}
+
+.chat-viewport:not(.empty-mode) .chat-panel-container.chat-expanded ~ .dot-cobweb-container {
+  width: 0 !important;
+  min-width: 0 !important;
+  border-left: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-viewport.graph-collapsed .floating-graph-toggle,
+.chat-viewport.empty-mode:not(.graph-open) .floating-graph-toggle {
+  display: inline-flex;
+}
+
 /* --------------------------------------------------------------------------
-   Top Floor View: Dot Cobweb Nexus Visualizer
+   Right Sidebar: Dot Cobweb Nexus Visualizer
    -------------------------------------------------------------------------- */
 .dot-cobweb-container {
-  width: 100%;
+  width: 310px;
+  min-width: 310px;
+  height: 100%;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: rgb(var(--c-ground));
-  transition: all 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  background-color: rgb(var(--c-sunken));
+  border-left: 1px solid rgb(var(--c-line));
+  background-image: radial-gradient(circle at 50% 50%, rgba(var(--c-accent), 0.05) 0%, transparent 72%);
+  transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1), min-width 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
 }
 
-.chat-viewport.empty-mode .dot-cobweb-container {
-  height: 0;
-  min-height: 0;
+.chat-viewport.empty-mode:not(.graph-open) .dot-cobweb-container,
+.chat-viewport.graph-collapsed .dot-cobweb-container {
+  width: 0 !important;
+  min-width: 0 !important;
   opacity: 0;
   pointer-events: none;
-  border-bottom: none;
-}
-
-.chat-viewport:not(.empty-mode) .dot-cobweb-container {
-  flex: 1;
-  min-height: 340px;
-  border-bottom: 1px solid rgb(var(--c-line));
-  background: radial-gradient(circle at 50% 50%, rgba(var(--c-accent), 0.04) 0%, transparent 72%);
-}
-
-.app-layout.sidebar-collapsed .chat-viewport:not(.empty-mode) .dot-cobweb-container {
-  min-height: 380px;
+  border-left: none;
 }
 
 .cobweb-top-bar {
-  position: absolute;
-  top: 10px;
-  left: 20px;
-  right: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgb(var(--c-line));
+  background-color: rgba(var(--c-surface), 0.7);
+  backdrop-filter: blur(8px);
   z-index: 10;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  pointer-events: none;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .cobweb-title-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: rgba(var(--c-surface), 0.85);
-  backdrop-filter: blur(8px);
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid rgb(var(--c-line));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-  pointer-events: auto;
+  gap: 6px;
+  min-width: 0;
 }
 
 .cobweb-live-dot {
@@ -943,54 +970,62 @@ button {
   background-color: rgb(var(--c-accent));
   box-shadow: 0 0 8px rgb(var(--c-accent));
   animation: breathe 1.8s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 .cobweb-title {
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: 700;
   color: rgb(var(--c-ink));
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .cobweb-task-count-badge {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 6px;
   background-color: rgb(var(--c-raised));
   color: rgb(var(--c-sub));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 96px;
 }
 
 .cobweb-controls {
-  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .cobweb-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background-color: rgba(var(--c-surface), 0.85);
-  backdrop-filter: blur(8px);
+  gap: 4px;
+  background-color: rgb(var(--c-surface));
   border: 1px solid rgb(var(--c-line));
-  border-radius: 8px;
-  padding: 4px 9px;
-  font-size: 0.72rem;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 0.7rem;
   font-weight: 600;
   color: rgb(var(--c-sub));
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   transition: all 120ms ease;
 }
 
 .cobweb-btn:hover {
-  background-color: rgb(var(--c-surface));
+  background-color: rgb(var(--c-raised));
   color: rgb(var(--c-ink));
   border-color: rgb(var(--c-faint));
 }
 
 .dot-cobweb-canvas {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: block;
   cursor: grab;
 }
@@ -1016,15 +1051,17 @@ button {
 }
 
 /* --------------------------------------------------------------------------
-   Bottom Split View: Chat Panel Container (Expandable to 100% Fullscreen)
+   Main Full-Height Chat Panel Container
    -------------------------------------------------------------------------- */
 .chat-panel-container {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
   background-color: rgb(var(--c-ground));
-  transition: all 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .chat-viewport.empty-mode .chat-panel-container {
@@ -1035,21 +1072,105 @@ button {
 }
 
 .chat-viewport:not(.empty-mode) .chat-panel-container {
-  height: clamp(320px, 42vh, 460px);
-  flex-shrink: 0;
+  flex: 1;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-/* Expand Chat to Cover Top Visualizer (side_pj isChatExpanded exact behavior) */
-.chat-panel-container.chat-expanded {
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 50 !important;
-  height: 100% !important;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.1);
+/* Local Folder Browser inside Runner / Workspace Modal */
+.local-folder-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.local-folder-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.local-folder-shortcut-chip {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--c-line));
+  background-color: rgb(var(--c-sunken));
+  color: rgb(var(--c-sub));
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.local-folder-shortcut-chip:hover {
+  background-color: rgb(var(--c-raised));
+  color: rgb(var(--c-ink));
+  border-color: rgb(var(--c-accent));
+}
+
+.local-folder-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.local-folder-path-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--c-line));
+  background-color: rgb(var(--c-ground));
+  color: rgb(var(--c-ink));
+  font-family: monospace;
+  font-size: 0.76rem;
+}
+
+.local-folder-path-input:focus {
+  outline: none;
+  border-color: rgb(var(--c-accent));
+}
+
+.local-folder-list {
+  max-height: 180px;
+  min-height: 110px;
+  overflow-y: auto;
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
+  background-color: rgb(var(--c-ground));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.local-folder-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  color: rgb(var(--c-ink));
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.local-folder-item:hover {
+  background-color: rgb(var(--c-raised));
+}
+
+.local-folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 /* Empty State Greeting */

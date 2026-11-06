@@ -841,12 +841,23 @@ async function deleteRun(runId, e) {
 let isChatExpanded = false;
 
 function toggleChatExpand() {
-  isChatExpanded = !isChatExpanded;
+  const chatView = document.getElementById("view-chat");
   const panel = document.getElementById("chat-panel-container");
   const btn = document.getElementById("btn-chat-expand");
-  if (panel) {
-    panel.classList.toggle("chat-expanded", isChatExpanded);
+  if (!chatView) return;
+
+  const isEmptyMode = chatView.classList.contains("empty-mode");
+  if (isEmptyMode) {
+    const isNowOpen = !chatView.classList.contains("graph-open");
+    chatView.classList.toggle("graph-open", isNowOpen);
+    chatView.classList.remove("graph-collapsed");
+    isChatExpanded = !isNowOpen;
+  } else {
+    isChatExpanded = !chatView.classList.contains("graph-collapsed");
+    chatView.classList.toggle("graph-collapsed", isChatExpanded);
+    if (panel) panel.classList.toggle("chat-expanded", isChatExpanded);
   }
+
   if (btn) {
     const maxIcon = btn.querySelector(".icon-maximize");
     const minIcon = btn.querySelector(".icon-minimize");
@@ -854,8 +865,12 @@ function toggleChatExpand() {
       maxIcon.classList.toggle("hidden", isChatExpanded);
       minIcon.classList.toggle("hidden", !isChatExpanded);
     }
-    btn.setAttribute("title", isChatExpanded ? "사무실/거미줄 그래프 보기 (접기) [Esc]" : "채팅창 화면 전체 펼치기 [Esc]");
+    btn.setAttribute(
+      "title",
+      isChatExpanded ? "우측 그래프 사이드바 열기 [Esc]" : "우측 그래프 사이드바 접기 [Esc]"
+    );
   }
+
   resizeCobwebCanvas();
   let frames = 0;
   const syncStep = () => {
@@ -1201,10 +1216,10 @@ function setCobwebTasks(tasks) {
   const count = tasks.length;
   updateCobwebBadge(`${count}개 병렬 태스크`);
 
-  const rect = cobwebCanvas ? cobwebCanvas.getBoundingClientRect() : { width: 800, height: 400 };
-  const baseW = rect.width || 800;
-  const baseH = rect.height || 400;
-  const radius = Math.max(95, Math.min(210, Math.min(baseW * 0.22, baseH * 0.36) + count * 6));
+  const rect = cobwebCanvas ? cobwebCanvas.getBoundingClientRect() : { width: 310, height: 500 };
+  const baseW = rect.width || 310;
+  const baseH = rect.height || 500;
+  const radius = Math.max(68, Math.min(115, Math.min(baseW * 0.34, baseH * 0.28) + count * 4));
 
   cobwebTaskNodes = tasks.map((t, idx) => {
     const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
@@ -1832,10 +1847,14 @@ function renderWorkspaceChip() {
   }
 }
 
+let currentBrowsedLocalPath = "";
+let currentBrowsedParentPath = "";
+
 function openRunnerRegisterModal() {
   const modal = document.getElementById("runner-register-modal-backdrop");
   if (modal) {
     modal.classList.remove("hidden");
+    loadLocalFolderBrowser(currentActiveWorkspacePath || "");
   }
 }
 
@@ -1849,6 +1868,122 @@ function closeRunnerRegisterModal() {
 function closeRunnerRegisterModalOnBackdrop(e) {
   if (e.target && e.target.id === "runner-register-modal-backdrop") {
     closeRunnerRegisterModal();
+  }
+}
+
+async function loadLocalFolderBrowser(targetPath = "") {
+  if (!currentWorkspaceId) return;
+  const listEl = document.getElementById("local-folder-list");
+  const pathInput = document.getElementById("local-folder-path-input");
+  const shortcutsEl = document.getElementById("local-folder-shortcuts");
+  const upBtn = document.getElementById("local-folder-up-btn");
+
+  if (listEl) {
+    listEl.innerHTML = `<span class="text-faint text-sm" style="padding:8px;">폴더 목록을 불러오는 중...</span>`;
+  }
+
+  try {
+    const qs = targetPath ? `?path=${encodeURIComponent(targetPath)}` : "";
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/local-dirs${qs}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (listEl) {
+        listEl.innerHTML = `<span class="text-faint text-sm" style="padding:8px;color:rgb(var(--c-danger));">${escapeHtml(data?.error?.message || "폴더를 열 수 없어요.")}</span>`;
+      }
+      return;
+    }
+
+    currentBrowsedLocalPath = data.currentPath || "";
+    currentBrowsedParentPath = data.parentPath || "";
+
+    if (pathInput) {
+      pathInput.value = currentBrowsedLocalPath;
+    }
+    if (upBtn) {
+      upBtn.disabled = !currentBrowsedParentPath;
+    }
+
+    if (shortcutsEl && Array.isArray(data.shortcuts)) {
+      shortcutsEl.innerHTML = data.shortcuts.map((s) => `
+        <button type="button" class="local-folder-shortcut-chip" onclick="loadLocalFolderBrowser('${escapeHtml(s.path)}')">
+          ${escapeHtml(s.label)}
+        </button>
+      `).join("");
+    }
+
+    if (listEl) {
+      const dirs = Array.isArray(data.directories) ? data.directories : [];
+      if (dirs.length === 0) {
+        listEl.innerHTML = `<span class="text-faint text-sm" style="padding:10px;">하위 폴더가 없습니다. 아래 '현재 폴더를 작업 폴더로 선택'을 눌러 이 폴더를 사용하세요.</span>`;
+      } else {
+        listEl.innerHTML = dirs.map((d) => `
+          <button type="button" class="local-folder-item" onclick="loadLocalFolderBrowser('${escapeHtml(d.path)}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:rgb(var(--c-accent));flex-shrink:0;">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.name)}</span>
+          </button>
+        `).join("");
+      }
+    }
+  } catch (err) {
+    if (listEl) {
+      listEl.innerHTML = `<span class="text-faint text-sm" style="padding:8px;">폴더 목록 조회 실패: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+}
+
+function browseLocalParentFolder() {
+  if (currentBrowsedParentPath) {
+    loadLocalFolderBrowser(currentBrowsedParentPath);
+  }
+}
+
+function browseLocalFolderByInput() {
+  const pathInput = document.getElementById("local-folder-path-input");
+  const val = pathInput ? pathInput.value.trim() : "";
+  if (val) {
+    loadLocalFolderBrowser(val);
+  }
+}
+
+async function confirmSelectedLocalFolder() {
+  if (!currentWorkspaceId) return;
+  const pathInput = document.getElementById("local-folder-path-input");
+  const targetPath = (pathInput && pathInput.value.trim()) || currentBrowsedLocalPath;
+  if (!targetPath) {
+    showToast("선택할 폴더 경로를 확인해 주세요", "error");
+    return;
+  }
+
+  const btn = document.getElementById("confirm-local-folder-btn");
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/select-local-folder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: targetPath })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.activePath) {
+      if (data.device) currentRunnerDevice = data.device;
+      currentActiveWorkspacePath = normalizePath(data.activePath);
+      currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
+      try {
+        localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
+      } catch {}
+      renderWorkspaceChip();
+      renderSettingsWorkspaceFolders();
+      closeRunnerRegisterModal();
+      showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
+    } else {
+      showToast(data?.error?.message || "폴더 설정에 실패했어요", "error");
+    }
+  } catch (err) {
+    showToast("폴더 설정 오류: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1902,6 +2037,8 @@ async function pickLocalHostFolderFromModal() {
       renderSettingsWorkspaceFolders();
       closeRunnerRegisterModal();
       showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
+    } else if (res.status === 200 && data.cancelled) {
+      showToast("Windows 폴더 선택 창이 닫혔어요. 위 폴더 목록에서 직접 선택하실 수도 있어요.", "info");
     } else if (res.status !== 200) {
       showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
     }
@@ -1913,50 +2050,7 @@ async function pickLocalHostFolderFromModal() {
 }
 
 async function pickWorkspaceFolder() {
-  const btn = document.getElementById("composer-folder-btn");
-  const labelEl = document.getElementById("composer-folder-btn-label");
-  if (btn) btn.disabled = true;
-  if (labelEl) labelEl.textContent = "폴더 고르는 중…";
-
-  try {
-    if (!currentWorkspaceId || !currentRunnerDevice) {
-      await loadRunners();
-    }
-
-    if (!currentRunnerDevice) {
-      openRunnerRegisterModal();
-      return;
-    }
-
-    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
-      method: "POST"
-    });
-    const data = await res.json().catch(() => ({}));
-
-    if (res.status === 200) {
-      if (data.activePath) {
-        currentActiveWorkspacePath = normalizePath(data.activePath);
-        currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
-        try {
-          localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
-        } catch {}
-        renderWorkspaceChip();
-        renderSettingsWorkspaceFolders();
-        showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
-      }
-    } else if (res.status === 409) {
-      openRunnerRegisterModal();
-    } else if (res.status === 422 || res.status === 504) {
-      showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
-    } else {
-      showToast(data.error?.message || "폴더 선택 실패", "error");
-    }
-  } catch (err) {
-    showToast("폴더 선택 오류: " + err.message, "error");
-  } finally {
-    if (btn) btn.disabled = false;
-    renderWorkspaceChip();
-  }
+  openRunnerRegisterModal();
 }
 
 function renderSettingsWorkspaceFolders() {

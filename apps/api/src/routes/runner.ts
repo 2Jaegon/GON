@@ -15,13 +15,21 @@ export type LocalFolderPickResult =
 const POWERSHELL_LOCAL_FOLDER_PICKER_SCRIPT = [
   "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;",
   "Add-Type -AssemblyName System.Windows.Forms;",
+  "[System.Windows.Forms.Application]::EnableVisualStyles();",
   "$top = New-Object System.Windows.Forms.Form;",
   "$top.TopMost = $true;",
+  "$top.StartPosition = 'CenterScreen';",
+  "$top.Width = 1; $top.Height = 1;",
+  "$top.ShowInTaskbar = $false;",
+  "$top.Opacity = 0;",
+  "$top.Show();",
+  "$top.Activate();",
   "$f = New-Object System.Windows.Forms.FolderBrowserDialog;",
   "$f.ShowNewFolderButton = $true;",
   "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) {",
   "  Write-Output $f.SelectedPath",
-  "}"
+  "}",
+  "$top.Close();"
 ].join(" ");
 
 export function defaultLocalFolderPicker(): Promise<LocalFolderPickResult> {
@@ -31,8 +39,8 @@ export function defaultLocalFolderPicker(): Promise<LocalFolderPickResult> {
   return new Promise((resolve) => {
     execFile(
       "powershell",
-      ["-NoProfile", "-STA", "-Command", POWERSHELL_LOCAL_FOLDER_PICKER_SCRIPT],
-      { encoding: "utf8", windowsHide: true },
+      ["-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", POWERSHELL_LOCAL_FOLDER_PICKER_SCRIPT],
+      { encoding: "utf8", windowsHide: false },
       (_err, stdout) => {
         const out = (stdout || "").trim();
         if (!out) {
@@ -307,6 +315,125 @@ export async function runnerRoutes(
     let targetDevice = list[0];
     if (!targetDevice) {
       const pairing = await db.runners.createPairingCode(workspaceId, (req as any).user?.id || "00000000-0000-0000-0000-000000000001");
+      targetDevice = await db.runners.redeemPairingCode(
+        pairing.pairingCode,
+        `${os.hostname() || "Local-PC"} (로컬 호스트)`,
+        "local-host-native-runner-key"
+      );
+      await db.runners.updateStatus(targetDevice.id, "online");
+    }
+
+    const updatedDevice = await db.runners.addAllowedPath(targetDevice.id, cleanPath, true);
+    const updated = updatedDevice ? toRunnerView(updatedDevice) : toRunnerView(targetDevice);
+
+    return reply.status(200).send({
+      device: updated,
+      activePath: cleanPath,
+      allowedPaths: updated.allowedPaths || [cleanPath]
+    });
+  });
+
+  // Browse local directories on host machine for built-in Web Folder Explorer
+  server.get("/api/v1/workspaces/:workspaceId/local-dirs", async (req, reply) => {
+    const query = (req.query || {}) as { path?: string };
+    const home = os.homedir();
+    const cwd = process.cwd();
+    const rawTarget = (query.path || "").trim() || cwd || home;
+
+    let resolvedTarget: string;
+    try {
+      resolvedTarget = path.resolve(rawTarget);
+      if (!fs.existsSync(resolvedTarget) || !fs.statSync(resolvedTarget).isDirectory()) {
+        return reply.status(400).send({
+          error: { code: "INVALID_DIRECTORY", message: "존재하지 않는 폴더 경로예요." }
+        });
+      }
+    } catch {
+      return reply.status(400).send({
+        error: { code: "INVALID_DIRECTORY", message: "폴더 경로를 읽을 수 없어요." }
+      });
+    }
+
+    const currentNormalized = normalizePath(resolvedTarget);
+    const parentResolved = path.dirname(resolvedTarget);
+    const parentNormalized = parentResolved !== resolvedTarget ? normalizePath(parentResolved) : null;
+
+    const directories: { name: string; path: string }[] = [];
+    try {
+      const entries = fs.readdirSync(resolvedTarget, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith("$") || entry.name === "System Volume Information") continue;
+        const fullPath = normalizePath(path.join(resolvedTarget, entry.name));
+        directories.push({ name: entry.name, path: fullPath });
+      }
+      directories.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    } catch {
+      // ignore permission errors on individual folders
+    }
+
+    const candidateShortcuts = [
+      { label: "현재 프로젝트", path: cwd },
+      { label: "바탕화면", path: path.join(home, "Desktop") },
+      { label: "문서", path: path.join(home, "Documents") },
+      { label: "다운로드", path: path.join(home, "Downloads") },
+      { label: "홈 폴더", path: home }
+    ];
+
+    const shortcuts = candidateShortcuts
+      .filter((s) => {
+        try {
+          return fs.existsSync(s.path) && fs.statSync(s.path).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+      .map((s) => ({ label: s.label, path: normalizePath(s.path) }));
+
+    return reply.status(200).send({
+      currentPath: currentNormalized,
+      parentPath: parentNormalized,
+      directories,
+      shortcuts
+    });
+  });
+
+  // Select a local directory directly by path (auto-provisions local host runner if none exists)
+  server.post("/api/v1/workspaces/:workspaceId/select-local-folder", async (req, reply) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const body = (req.body || {}) as { path?: string };
+    const rawPath = (body.path || "").trim();
+
+    if (!rawPath) {
+      return reply.status(400).send({
+        error: { code: "BAD_REQUEST", message: "폴더 경로를 입력해 주세요." }
+      });
+    }
+
+    let resolvedPath: string;
+    try {
+      resolvedPath = path.resolve(rawPath);
+      if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isDirectory()) {
+        return reply.status(400).send({
+          error: { code: "INVALID_DIRECTORY", message: "해당 경로의 폴더를 찾을 수 없어요." }
+        });
+      }
+    } catch {
+      return reply.status(400).send({
+        error: { code: "INVALID_DIRECTORY", message: "유효하지 않은 폴더 경로예요." }
+      });
+    }
+
+    const cleanPath = normalizePath(resolvedPath);
+    syncLocalRunnerAllowedPath(cleanPath);
+
+    const list = await db.runners.listForWorkspace(workspaceId);
+    let targetDevice = list[0];
+    if (!targetDevice) {
+      const pairing = await db.runners.createPairingCode(
+        workspaceId,
+        (req as any).user?.id || "00000000-0000-0000-0000-000000000001"
+      );
       targetDevice = await db.runners.redeemPairingCode(
         pairing.pairingCode,
         `${os.hostname() || "Local-PC"} (로컬 호스트)`,
