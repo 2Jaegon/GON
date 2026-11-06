@@ -506,12 +506,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ==========================================================================
-// Model Picker & Reasoning Effort (side_pj & Claude exact behavior)
+// Model Picker & Reasoning Effort (subscription models from GET /models)
 // ==========================================================================
-
-let currentSelectedModel = "claude-3-7-sonnet";
-let currentSelectedModelName = "Opus 3.5";
-let currentSelectedEffort = "medium"; // 'low' | 'medium' | 'high'
 
 const EFFORT_LABELS = {
   low: "Low",
@@ -519,28 +515,154 @@ const EFFORT_LABELS = {
   high: "High",
 };
 
-function initModelPicker() {
-  const savedModel = localStorage.getItem("gon.selected_model");
-  const savedEffort = localStorage.getItem("gon.selected_effort");
-  const savedName = localStorage.getItem("gon.selected_model_name");
-  if (savedModel) currentSelectedModel = savedModel;
-  if (savedEffort) currentSelectedEffort = savedEffort;
-  if (savedName) currentSelectedModelName = savedName;
-  updateModelPickerButtonUI();
+// usage.provider / connection provider -> AI display name + logo
+const AI_BRANDS = {
+  anthropic: { name: "Claude", logo: "/logos/anthropic.svg" },
+  google: { name: "Gemini", logo: "/logos/google.svg" },
+  antigravity: { name: "Gemini", logo: "/logos/google.svg" },
+  openai: { name: "Codex", logo: "/logos/openai.svg" },
+};
+
+function aiBrand(provider) {
+  return AI_BRANDS[provider] || { name: "AI", logo: null };
 }
 
-function updateModelPickerButtonUI() {
+// Avatar for an assistant answer; unknown providers (e.g. "mock") get a neutral icon.
+function assistantAvatarHtml(provider) {
+  const brand = aiBrand(provider);
+  if (brand.logo) {
+    return `<img src="${brand.logo}" alt="${escapeHtml(brand.name)}" class="assistant-avatar" width="24" height="24">`;
+  }
+  return `<svg class="assistant-avatar assistant-avatar-generic" role="img" aria-label="AI" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"></circle><path d="M8 13s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>`;
+}
+
+function setTurnAvatar(runId, provider) {
+  const turn = document.getElementById(`turn-${runId}`);
+  const old = turn && turn.querySelector(".assistant-avatar");
+  if (old) old.outerHTML = assistantAvatarHtml(provider);
+}
+
+let modelCatalog = []; // GET /models -> subscription[]
+let modelSelection = null; // { connectionId, model, effort }
+
+function selectedConnection() {
+  return modelSelection ? modelCatalog.find((c) => c.connectionId === modelSelection.connectionId) : null;
+}
+
+function defaultEffort(conn) {
+  const efforts = conn.efforts || [];
+  return efforts.includes("medium") ? "medium" : efforts[0] || null;
+}
+
+// Keep the saved selection if it is still offered; otherwise fall back to the first model.
+function normalizeModelSelection(saved) {
+  const conn = saved && modelCatalog.find((c) => c.connectionId === saved.connectionId && c.models.some((m) => m.id === saved.model));
+  if (conn) {
+    const effort = (conn.efforts || []).includes(saved.effort) ? saved.effort : defaultEffort(conn);
+    return { connectionId: conn.connectionId, model: saved.model, effort };
+  }
+  const first = modelCatalog.find((c) => c.models.length > 0);
+  return first ? { connectionId: first.connectionId, model: first.models[0].id, effort: defaultEffort(first) } : null;
+}
+
+function saveModelSelection() {
+  try {
+    localStorage.setItem("gon.model_selection", JSON.stringify(modelSelection));
+  } catch (e) {}
+}
+
+function initModelPicker() {
+  const list = document.getElementById("popover-model-list");
+  if (list) {
+    list.addEventListener("click", (e) => {
+      const item = e.target.closest(".popover-model-item");
+      if (item) selectModelItem(item.dataset.connectionId, item.dataset.modelId);
+    });
+  }
+  renderModelPicker();
+}
+
+async function loadModelCatalog() {
+  if (!currentWorkspaceId) return;
+  try {
+    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/models`);
+    if (!res.ok) return;
+    const data = await res.json();
+    modelCatalog = Array.isArray(data.subscription) ? data.subscription : [];
+  } catch (err) {
+    console.warn("Load models error:", err);
+    return;
+  }
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem("gon.model_selection") || "null");
+  } catch (e) {}
+  modelSelection = normalizeModelSelection(modelSelection || saved);
+  saveModelSelection();
+  renderModelPicker();
+}
+
+function renderModelPicker() {
+  const conn = selectedConnection();
   const labelEl = document.getElementById("model-picker-display-label");
   if (labelEl) {
-    const effortText = EFFORT_LABELS[currentSelectedEffort] || "중간";
-    labelEl.textContent = `${currentSelectedModelName} ${effortText}`;
+    const model = conn && conn.models.find((m) => m.id === modelSelection.model);
+    if (!model) {
+      labelEl.textContent = "모델 선택";
+    } else {
+      const effort = modelSelection.effort ? ` ${EFFORT_LABELS[modelSelection.effort] || ""}` : "";
+      labelEl.textContent = `${model.label}${effort}`;
+    }
+  }
+
+  const efforts = conn ? conn.efforts || [] : [];
+  const effortRow = document.getElementById("popover-effort-row");
+  if (effortRow) {
+    effortRow.classList.toggle("hidden", efforts.length === 0);
+    if (effortRow.nextElementSibling) effortRow.nextElementSibling.classList.toggle("hidden", efforts.length === 0);
   }
   document.querySelectorAll(".effort-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.effort === currentSelectedEffort);
+    btn.classList.toggle("hidden", !efforts.includes(btn.dataset.effort));
+    btn.classList.toggle("active", !!modelSelection && btn.dataset.effort === modelSelection.effort);
   });
-  document.querySelectorAll(".popover-model-item").forEach((item) => {
-    item.classList.toggle("active", item.dataset.modelId === currentSelectedModel);
-  });
+
+  const list = document.getElementById("popover-model-list");
+  if (!list) return;
+  if (modelCatalog.length === 0) {
+    list.innerHTML = `
+      <li class="popover-empty">
+        <span>연결된 AI가 없어요</span>
+        <button type="button" class="btn btn-sm" onclick="openConnectionsFromPicker()">연결 화면으로 가기</button>
+      </li>`;
+    return;
+  }
+  list.innerHTML = `<li class="popover-section-title">구독</li>` + modelCatalog.map((c) => {
+    const brand = aiBrand(c.provider);
+    const plan = c.planVerified && c.plan ? c.plan : "요금제 확인 안 됨";
+    const logo = brand.logo ? `<img src="${brand.logo}" alt="" width="16" height="16">` : "";
+    const items = c.models.map((m) => {
+      const active = modelSelection && modelSelection.connectionId === c.connectionId && modelSelection.model === m.id;
+      return `
+        <li class="popover-model-item${active ? " active" : ""}" data-connection-id="${escapeHtml(c.connectionId)}" data-model-id="${escapeHtml(m.id)}">
+          <div class="model-meta"><span class="model-name">${escapeHtml(m.label)}</span></div>
+          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </li>`;
+    }).join("");
+    return `
+      <li class="popover-provider-head">${logo}<span class="popover-provider-name">${escapeHtml(c.displayName)}</span><span class="popover-provider-plan">${escapeHtml(plan)}</span></li>${items}`;
+  }).join("");
+}
+
+function openConnectionsFromPicker() {
+  closeModelPickerPopover();
+  switchNavTab("connections");
+}
+
+function closeModelPickerPopover() {
+  const popover = document.getElementById("model-picker-popover");
+  if (popover) popover.classList.add("hidden");
+  const btn = document.getElementById("composer-model-picker-btn");
+  if (btn) btn.setAttribute("aria-expanded", "false");
 }
 
 function toggleModelPickerPopover(e) {
@@ -548,47 +670,37 @@ function toggleModelPickerPopover(e) {
   const popover = document.getElementById("model-picker-popover");
   const btn = document.getElementById("composer-model-picker-btn");
   if (!popover) return;
-  const isClosed = popover.classList.contains("hidden");
-  if (isClosed) {
+  if (popover.classList.contains("hidden")) {
     popover.classList.remove("hidden");
     if (btn) btn.setAttribute("aria-expanded", "true");
+    loadModelCatalog(); // pick up connections added since the last load
   } else {
-    popover.classList.add("hidden");
-    if (btn) btn.setAttribute("aria-expanded", "false");
+    closeModelPickerPopover();
   }
 }
 
 function selectModelEffort(effort) {
-  currentSelectedEffort = effort;
-  try {
-    localStorage.setItem("gon.selected_effort", effort);
-  } catch (e) {}
-  updateModelPickerButtonUI();
+  if (!modelSelection) return;
+  modelSelection.effort = effort;
+  saveModelSelection();
+  renderModelPicker();
 }
 
-function selectModelItem(modelId, modelName) {
-  currentSelectedModel = modelId;
-  currentSelectedModelName = modelName;
-  try {
-    localStorage.setItem("gon.selected_model", modelId);
-    localStorage.setItem("gon.selected_model_name", modelName);
-  } catch (e) {}
-  updateModelPickerButtonUI();
-  const popover = document.getElementById("model-picker-popover");
-  if (popover) popover.classList.add("hidden");
-  const btn = document.getElementById("composer-model-picker-btn");
-  if (btn) btn.setAttribute("aria-expanded", "false");
+function selectModelItem(connectionId, modelId) {
+  const conn = modelCatalog.find((c) => c.connectionId === connectionId);
+  if (!conn) return;
+  const current = modelSelection && modelSelection.effort;
+  modelSelection = { connectionId, model: modelId, effort: (conn.efforts || []).includes(current) ? current : defaultEffort(conn) };
+  saveModelSelection();
+  renderModelPicker();
+  closeModelPickerPopover();
 }
 
 document.addEventListener("click", (e) => {
   const popover = document.getElementById("model-picker-popover");
   const container = document.getElementById("model-picker-container");
   if (popover && !popover.classList.contains("hidden")) {
-    if (!container || !container.contains(e.target)) {
-      popover.classList.add("hidden");
-      const btn = document.getElementById("composer-model-picker-btn");
-      if (btn) btn.setAttribute("aria-expanded", "false");
-    }
+    if (!container || !container.contains(e.target)) closeModelPickerPopover();
   }
 });
 
@@ -1182,6 +1294,7 @@ async function init() {
       const data = await wsRes.json();
       if (data.items.length > 0) {
         currentWorkspaceId = data.items[0].id;
+        loadModelCatalog();
         await loadProjects();
         await initWorkspaceFolderState();
         await loadSidebarRuns();
@@ -1785,13 +1898,14 @@ async function submitChatPrompt() {
   thread.appendChild(userRow);
 
   const isChat = isLikelyChat(requestText);
+  const chatProvider = selectedConnection()?.provider;
   const tempId = "run-" + Date.now();
   const assistantTurn = document.createElement("div");
   assistantTurn.className = "assistant-turn";
   assistantTurn.id = `turn-${tempId}`;
   assistantTurn.innerHTML = `
     <div class="assistant-row">
-      <img src="/logo.webp" alt="Gon" class="assistant-avatar" width="24" height="24">
+      ${assistantAvatarHtml(chatProvider)}
       <div class="assistant-main">
         <!-- WorkProcess Accordion (side_pj & Claude style with subtle left border line) -->
         <div class="work-process-wrap ${isChat ? 'hidden' : ''}" id="process-wrap-${tempId}">
@@ -1839,7 +1953,7 @@ async function submitChatPrompt() {
 
         <!-- Assistant Response Text (Clean Markdown without box border) -->
         <div class="report-viewer" id="response-${tempId}">
-          ${isChat ? 'Gon이 답변을 작성하고 있습니다...' : '작업 환경을 준비하고 있습니다...'}
+          ${isChat ? `${escapeHtml(aiBrand(chatProvider).name)}가 답변을 쓰고 있어요…` : '작업 환경을 준비하고 있습니다...'}
         </div>
       </div>
     </div>
@@ -1868,7 +1982,9 @@ async function submitChatPrompt() {
         sessionId: activeSessionId,
         workspacePath: currentActiveWorkspacePath || undefined,
         executionMode: mode,
-        providerPreference: currentSelectedModel || "auto",
+        connectionId: modelSelection?.connectionId,
+        model: modelSelection?.model,
+        effort: modelSelection?.effort || undefined,
         attachments: currentAttachments.map(f => ({
           name: f.name,
           size: f.size,
@@ -1882,8 +1998,15 @@ async function submitChatPrompt() {
 
     if (!res.ok) {
       updateTurnStatus(tempId, "요청 처리 실패", false);
+      let apiMessage = "";
+      if (res.status === 400) {
+        try {
+          apiMessage = (await res.json())?.error?.message || "";
+        } catch {}
+      }
+      if (apiMessage) showToast(apiMessage, "error");
       const respEl = document.getElementById(`response-${tempId}`);
-      if (respEl) respEl.textContent = "작업 생성에 실패했습니다. API 서버 상태를 확인하세요.";
+      if (respEl) respEl.textContent = apiMessage || "작업 생성에 실패했습니다. API 서버 상태를 확인하세요.";
       return;
     }
 
@@ -1984,6 +2107,7 @@ function connectRunSSE(runId) {
   activeEventSource.addEventListener("chat:response", (e) => {
     try {
       const payload = JSON.parse(e.data);
+      if (payload.usage?.provider) setTurnAvatar(runId, payload.usage.provider);
       if (payload.text) {
         setResponseText(runId, payload.text);
       }
@@ -2333,7 +2457,7 @@ async function renderTurnInThread(thread, run) {
   assistantTurn.id = `turn-${run.id}`;
   assistantTurn.innerHTML = `
     <div class="assistant-row">
-      <img src="/logo.webp" alt="Gon" class="assistant-avatar" width="24" height="24">
+      ${assistantAvatarHtml(null)}
       <div class="assistant-main">
         <div class="work-process-wrap ${isChat ? 'hidden' : ''}" id="process-wrap-${run.id}">
           <button type="button" class="work-process-toggle-btn" onclick="toggleWorkProcess('${run.id}')">
@@ -2380,6 +2504,9 @@ async function renderTurnInThread(thread, run) {
       const events = data.items || [];
       let finalOutput = "";
       for (const ev of events) {
+        if (ev.payload?.usage?.provider && (ev.eventType === "chat:response" || ev.eventType === "run:completed")) {
+          setTurnAvatar(run.id, ev.payload.usage.provider);
+        }
         if (ev.eventType === "chat:response" && ev.payload?.text) {
           finalOutput = ev.payload.text;
         } else if (ev.eventType === "run:completed" && ev.payload?.output) {

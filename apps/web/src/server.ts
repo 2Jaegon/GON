@@ -44,6 +44,7 @@ export async function createWebServer() {
     else if (ext === ".css") reply.type("text/css; charset=utf-8");
     else if (ext === ".js") reply.type("application/javascript; charset=utf-8");
     else if (ext === ".json") reply.type("application/json; charset=utf-8");
+    else if (ext === ".svg") reply.type("image/svg+xml");
 
     return reply.send(content);
   });

@@ -267,15 +267,15 @@
                       aria-expanded="false"
                       title="모델 및 추론 강도 선택"
                     >
-                      <span id="model-picker-display-label">Opus 3.5 중간</span>
+                      <span id="model-picker-display-label">모델 선택</span>
                       <svg class="model-picker-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"></polyline>
                       </svg>
                     </button>
 
-                    <!-- Model Picker Popover (Matches side_pj & Claude Model Picker) -->
+                    <!-- Model Picker Popover (subscription models, rendered by app.js) -->
                     <div id="model-picker-popover" class="model-picker-popover hidden" role="dialog" aria-label="모델 및 추론 강도 선택">
-                      <div class="popover-effort-row">
+                      <div class="popover-effort-row" id="popover-effort-row">
                         <span class="popover-label">추론 강도</span>
                         <div class="effort-segment-group">
                           <button type="button" class="effort-btn" data-effort="low" onclick="selectModelEffort('low')">Low</button>
@@ -286,43 +286,7 @@
 
                       <div class="popover-divider"></div>
 
-                      <ul class="popover-model-list" id="popover-model-list">
-                        <li class="popover-model-item active" data-model-id="claude-3-7-sonnet" onclick="selectModelItem('claude-3-7-sonnet', 'Claude 3.7 Sonnet')">
-                          <div class="model-meta">
-                            <span class="model-name">Claude 3.7 Sonnet</span>
-                            <span class="model-desc">최신 플래그십, 하이브리드 확장 사고</span>
-                          </div>
-                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </li>
-                        <li class="popover-model-item" data-model-id="claude-3-5-opus" onclick="selectModelItem('claude-3-5-opus', 'Opus 3.5')">
-                          <div class="model-meta">
-                            <span class="model-name">Claude 3.5 Opus</span>
-                            <span class="model-desc">고난도 복합 추론 및 대규모 아키텍처</span>
-                          </div>
-                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </li>
-                        <li class="popover-model-item" data-model-id="claude-3-5-haiku" onclick="selectModelItem('claude-3-5-haiku', 'Claude 3.5 Haiku')">
-                          <div class="model-meta">
-                            <span class="model-name">Claude 3.5 Haiku</span>
-                            <span class="model-desc">초고속 레이턴시, 즉시 응답</span>
-                          </div>
-                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </li>
-                        <li class="popover-model-item" data-model-id="gemini-2-5-pro" onclick="selectModelItem('gemini-2-5-pro', 'Gemini 2.5 Pro')">
-                          <div class="model-meta">
-                            <span class="model-name">Gemini 2.5 Pro</span>
-                            <span class="model-desc">1M+ 대규모 컨텍스트 및 심층 분석</span>
-                          </div>
-                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </li>
-                        <li class="popover-model-item" data-model-id="gpt-4o" onclick="selectModelItem('gpt-4o', 'GPT-4o')">
-                          <div class="model-meta">
-                            <span class="model-name">GPT-4o</span>
-                            <span class="model-desc">OpenAI 옴니 모델 플래그십</span>
-                          </div>
-                          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </li>
-                      </ul>
+                      <ul class="popover-model-list" id="popover-model-list"></ul>
                     </div>
                   </div>
 
