@@ -177,4 +177,27 @@ describe("PICK_FOLDER end-to-end route and gateway", () => {
     const body = JSON.parse(res.body);
     expect(body.error?.code).toBe("RUNNER_OFFLINE");
   });
+
+  it("POST /api/v1/workspaces/:w/pick-local-folder auto-provisions local host runner and sets activePath", async () => {
+    const app = await createAuthedServer({
+      logger: false,
+      localFolderPicker: async () => ({ path: "C:\\Users\\aicam\\Desktop\\project-alpha" })
+    });
+    const localServer = app.server;
+    await localServer.ready();
+
+    try {
+      const res = await localServer.inject({
+        method: "POST",
+        url: `/api/v1/workspaces/${DEV_WORKSPACE_ID}/pick-local-folder`
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.activePath).toBe("C:/Users/aicam/Desktop/project-alpha");
+      expect(body.allowedPaths).toContain("C:/Users/aicam/Desktop/project-alpha");
+      expect(body.device?.id).toBeDefined();
+    } finally {
+      await localServer.close();
+    }
+  });
 });

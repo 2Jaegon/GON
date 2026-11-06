@@ -72,8 +72,9 @@ export class ClaudeProvider implements IProviderAdapter {
       }
 
       const outputText = parsed.result || "답변을 수신했습니다.";
-      const inputTokens = parsed.usage?.input_tokens ?? Math.ceil(fullPrompt.length * 1.5);
-      const outputTokens = parsed.usage?.output_tokens ?? Math.ceil(outputText.length * 1.5);
+      const measured = parsed.usage?.input_tokens != null || parsed.usage?.output_tokens != null;
+      const inputTokens = parsed.usage?.input_tokens ?? 0;
+      const outputTokens = parsed.usage?.output_tokens ?? 0;
       const cachedTokens = parsed.usage?.cache_read_input_tokens ?? 0;
 
       return {
@@ -90,9 +91,9 @@ export class ClaudeProvider implements IProviderAdapter {
           cachedInputTokens: cachedTokens,
           cacheWriteTokens: 0,
           durationMs,
-          measuredCostUsd: 0, // Subscription covered ($0 API billing)
-          costConfidence: "measured",
-          source: "claude-code-cli"
+          measuredCostUsd: measured ? 0 : null,
+          costConfidence: measured ? "measured" : "unavailable",
+          source: measured ? "claude-code-cli" : "claude-code-cli (tokens not measured)"
         }
       };
     } catch (err: any) {

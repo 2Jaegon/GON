@@ -1,10 +1,49 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
 import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
 import { RedeemPairingDTOSchema, GrantPathDTOSchema, toRunnerView } from "@aso/contracts";
 import { RunnerGateway } from "../services/runner-gateway.js";
+
+export type LocalFolderPickResult =
+  | { path: string }
+  | { cancelled: true }
+  | { unsupported: true };
+
+const POWERSHELL_LOCAL_FOLDER_PICKER_SCRIPT = [
+  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;",
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  "$top = New-Object System.Windows.Forms.Form;",
+  "$top.TopMost = $true;",
+  "$f = New-Object System.Windows.Forms.FolderBrowserDialog;",
+  "$f.ShowNewFolderButton = $true;",
+  "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) {",
+  "  Write-Output $f.SelectedPath",
+  "}"
+].join(" ");
+
+export function defaultLocalFolderPicker(): Promise<LocalFolderPickResult> {
+  if (process.platform !== "win32") {
+    return Promise.resolve({ unsupported: true });
+  }
+  return new Promise((resolve) => {
+    execFile(
+      "powershell",
+      ["-NoProfile", "-STA", "-Command", POWERSHELL_LOCAL_FOLDER_PICKER_SCRIPT],
+      { encoding: "utf8", windowsHide: true },
+      (_err, stdout) => {
+        const out = (stdout || "").trim();
+        if (!out) {
+          resolve({ cancelled: true });
+        } else {
+          resolve({ path: out });
+        }
+      }
+    );
+  });
+}
 
 function normalizePath(rawPath: string): string {
   if (!rawPath) return "";
@@ -32,8 +71,16 @@ function syncLocalRunnerAllowedPath(dirPath: string) {
   } catch {}
 }
 
-export async function runnerRoutes(server: FastifyInstance, options: { db: IDatabase; runnerGateway?: RunnerGateway }) {
+export async function runnerRoutes(
+  server: FastifyInstance,
+  options: {
+    db: IDatabase;
+    runnerGateway?: RunnerGateway;
+    localFolderPicker?: () => Promise<LocalFolderPickResult>;
+  }
+) {
   const { db, runnerGateway } = options;
+  const pickLocal = options.localFolderPicker || defaultLocalFolderPicker;
 
   // Issue pairing code
   server.post("/api/v1/workspaces/:workspaceId/runner-pairings", async (req, reply) => {
@@ -238,5 +285,43 @@ export async function runnerRoutes(server: FastifyInstance, options: { db: IData
     }
 
     return reply.status(504).send({ error: { code: "TIMEOUT", message: "폴더 선택 시간이 초과되었어요" } });
+  });
+
+  // Pick folder directly on local host machine (auto-provisions local host runner if none exists)
+  server.post("/api/v1/workspaces/:workspaceId/pick-local-folder", async (req, reply) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const result = await pickLocal();
+
+    if ("unsupported" in result) {
+      return reply.status(422).send({ error: { code: "UNSUPPORTED_PLATFORM", message: "이 OS에서는 아직 폴더 창을 못 띄워요" } });
+    }
+
+    if ("cancelled" in result) {
+      return reply.status(200).send({ cancelled: true });
+    }
+
+    const cleanPath = normalizePath(result.path);
+    syncLocalRunnerAllowedPath(cleanPath);
+
+    let list = await db.runners.listForWorkspace(workspaceId);
+    let targetDevice = list[0];
+    if (!targetDevice) {
+      const pairing = await db.runners.createPairingCode(workspaceId, (req as any).user?.id || "00000000-0000-0000-0000-000000000001");
+      targetDevice = await db.runners.redeemPairingCode(
+        pairing.pairingCode,
+        `${os.hostname() || "Local-PC"} (로컬 호스트)`,
+        "local-host-native-runner-key"
+      );
+      await db.runners.updateStatus(targetDevice.id, "online");
+    }
+
+    const updatedDevice = await db.runners.addAllowedPath(targetDevice.id, cleanPath, true);
+    const updated = updatedDevice ? toRunnerView(updatedDevice) : toRunnerView(targetDevice);
+
+    return reply.status(200).send({
+      device: updated,
+      activePath: cleanPath,
+      allowedPaths: updated.allowedPaths || [cleanPath]
+    });
   });
 }

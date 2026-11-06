@@ -46,6 +46,34 @@ export class OrchestratorService {
     await this.emitEvent(workspaceId, runId, "run:failed", { error: err?.message || String(err) });
   }
 
+  private async buildConversationalPrompt(run: Run): Promise<string> {
+    const sessionId = run.runContext?.sessionId;
+    if (!sessionId) return run.rawRequest;
+
+    const projectRuns = await this.db.runs.listForProject(run.projectId);
+    const priorRuns = projectRuns
+      .filter((r) => r.id !== run.id && r.runContext?.sessionId === sessionId && r.status === "completed")
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(-6);
+
+    if (priorRuns.length === 0) return run.rawRequest;
+
+    const historyLines: string[] = [];
+    for (const prior of priorRuns) {
+      const events = await this.db.events.listForRun(prior.id);
+      const replyEvent = [...events].reverse().find(
+        (ev) => (ev.eventType === "chat:response" && ev.payload?.text) || (ev.eventType === "run:completed" && ev.payload?.output)
+      );
+      const answer = replyEvent?.payload?.text || replyEvent?.payload?.output || "";
+      historyLines.push(`사용자: ${prior.rawRequest}`);
+      if (answer) {
+        historyLines.push(`AI: ${answer}`);
+      }
+    }
+
+    return `[이전 대화 기록]\n${historyLines.join("\n")}\n\n[현재 질문]\n${run.rawRequest}`;
+  }
+
   public async emitEvent(
     workspaceId: string,
     runId: string,
@@ -77,11 +105,12 @@ export class OrchestratorService {
 
         const selection = await this.selectionFor(run);
         const { provider } = selection;
+        const conversationalPrompt = await this.buildConversationalPrompt(run);
         const chatResult = await (provider.executeChat
           ? provider.executeChat({
               runId,
               workspaceId,
-              prompt: rawRequest,
+              prompt: conversationalPrompt,
               model: run.runContext?.connectionId
                 ? selection.model
                 : run.providerPreference !== "auto" ? run.providerPreference : "gemini-3.8-flash-low",
@@ -92,7 +121,7 @@ export class OrchestratorService {
           : this.providerRegistry.get("agy").executeChat!({
               runId,
               workspaceId,
-              prompt: rawRequest,
+              prompt: conversationalPrompt,
               model: "gemini-3.8-flash-low",
               context: run.runContext
             }));

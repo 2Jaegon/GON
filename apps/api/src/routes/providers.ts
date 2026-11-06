@@ -64,7 +64,7 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
   // Models, plan and effort levels offered by each connected local subscription
   server.get("/api/v1/workspaces/:workspaceId/models", async (req) => {
     const { workspaceId } = req.params as { workspaceId: string };
-    const connections = await db.providers.listForWorkspace(workspaceId);
+    const connections = await syncLocalSubscriptions(workspaceId);
     const subscription = connections
       .filter((c) => c.mode === "LOCAL_NATIVE_CLI" && c.status === "connected")
       .map((c) => {
@@ -80,6 +80,75 @@ export async function providerRoutes(server: FastifyInstance, options: { db: IDa
         };
       });
     return { subscription };
+  });
+
+  // Trigger native CLI OAuth login for a subscription provider (Claude, Gemini/Antigravity, Codex)
+  server.post("/api/v1/workspaces/:workspaceId/connections/:provider/login", async (req, reply) => {
+    const { workspaceId, provider } = req.params as { workspaceId: string; provider: string };
+    if (provider !== "anthropic" && provider !== "google" && provider !== "openai") {
+      return reply.status(400).send({
+        error: { code: "INVALID_PROVIDER", message: "지원하지 않는 프로바이더예요" }
+      });
+    }
+
+    const result = await detector.loginSubscription(provider);
+    const detected = await detector.scanSubscriptions(workspaceId);
+    for (const d of detected) {
+      if (d.installed) {
+        const existing = await db.providers.findById(d.connectionView.id);
+        if (!existing) {
+          await db.providers.create(d.connectionView);
+        } else {
+          await db.providers.updateStatus(d.connectionView.id, d.connectionView.status);
+          await db.providers.updateMetadata(d.connectionView.id, { models: d.connectionView.metadata?.models });
+        }
+      }
+    }
+
+    const items = await db.providers.listForWorkspace(workspaceId);
+    if (!result.success) {
+      return reply.status(400).send({
+        error: { code: "LOGIN_FAILED", message: result.message },
+        items
+      });
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      items
+    };
+  });
+
+  // Logout from a native CLI subscription provider
+  server.post("/api/v1/workspaces/:workspaceId/connections/:provider/logout", async (req, reply) => {
+    const { workspaceId, provider } = req.params as { workspaceId: string; provider: string };
+    if (provider !== "anthropic" && provider !== "google" && provider !== "openai") {
+      return reply.status(400).send({
+        error: { code: "INVALID_PROVIDER", message: "지원하지 않는 프로바이더예요" }
+      });
+    }
+
+    const result = await detector.logoutSubscription(provider);
+    const existingList = await db.providers.listForWorkspace(workspaceId);
+    const target = existingList.find((c) => c.provider === provider && c.mode === "LOCAL_NATIVE_CLI");
+    if (target && result.success) {
+      await db.providers.updateStatus(target.id, "needs_action");
+    }
+
+    const items = await db.providers.listForWorkspace(workspaceId);
+    if (!result.success) {
+      return reply.status(400).send({
+        error: { code: "LOGOUT_FAILED", message: result.message },
+        items
+      });
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      items
+    };
   });
 
   // Register BYOK API Key (Not implemented)

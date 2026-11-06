@@ -36,6 +36,15 @@ describe("ASO Web static server", () => {
     expect(res.body).not.toContain("import fs");
   });
 
+  it("rejects encoded backslash (%5c) and malformed URI encodings with 404", async () => {
+    const resBackslash = await rawGet("/..%5csrc%5cserver.ts");
+    expect(resBackslash.status).toBe(404);
+    expect(resBackslash.body).not.toContain("import fs");
+
+    const resMalformed = await rawGet("/%E0%A4%A");
+    expect([400, 404]).toContain(resMalformed.status);
+  });
+
   it("still serves index.html at /", async () => {
     const s = await createWebServer();
     const res = await s.inject({ method: "GET", url: "/" });

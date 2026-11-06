@@ -9,7 +9,7 @@ import { workspaceRoutes } from "./routes/workspaces.js";
 import { projectRoutes } from "./routes/projects.js";
 import { runRoutes } from "./routes/runs.js";
 import { providerRoutes } from "./routes/providers.js";
-import { runnerRoutes } from "./routes/runner.js";
+import { runnerRoutes, LocalFolderPickResult } from "./routes/runner.js";
 import { skillsRoutes } from "./routes/skills.js";
 import { authRoutes, AuthConfig } from "./auth/routes.js";
 import { GoogleIdentity } from "./auth/google.js";
@@ -24,6 +24,7 @@ export interface ApiServerOptions {
   logger?: boolean;
   cliRunner?: CliRunner;
   skillCatalogPath?: string;
+  localFolderPicker?: () => Promise<LocalFolderPickResult>;
   auth?: {
     googleClientId?: string;
     allowedEmails?: string[];
@@ -158,7 +159,7 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
   await server.register(projectRoutes, { db });
   await server.register(runRoutes, { db, orchestrator, eventBus });
   await server.register(providerRoutes, { db, cliRunner: options.cliRunner });
-  await server.register(runnerRoutes, { db, runnerGateway });
+  await server.register(runnerRoutes, { db, runnerGateway, localFolderPicker: options.localFolderPicker });
   await server.register(skillsRoutes, { catalogPath: options.skillCatalogPath });
 
   // Attach WebSocket to server once ready

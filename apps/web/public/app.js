@@ -720,9 +720,15 @@ function normalizeModelSelection(saved) {
   return first ? { connectionId: first.connectionId, model: first.models[0].id, effort: defaultEffort(first) } : null;
 }
 
+let modelCatalogLoadError = false;
+
 function saveModelSelection() {
   try {
-    localStorage.setItem("gon.model_selection", JSON.stringify(modelSelection));
+    if (!modelSelection) {
+      localStorage.removeItem("gon.model_selection");
+    } else {
+      localStorage.setItem("gon.model_selection", JSON.stringify(modelSelection));
+    }
   } catch (e) {}
 }
 
@@ -741,11 +747,18 @@ async function loadModelCatalog() {
   if (!currentWorkspaceId) return;
   try {
     const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/models`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      modelCatalogLoadError = true;
+      renderModelPicker();
+      return;
+    }
     const data = await res.json();
     modelCatalog = Array.isArray(data.subscription) ? data.subscription : [];
+    modelCatalogLoadError = false;
   } catch (err) {
     console.warn("Load models error:", err);
+    modelCatalogLoadError = true;
+    renderModelPicker();
     return;
   }
   let saved = null;
@@ -784,16 +797,24 @@ function renderModelPicker() {
   const list = document.getElementById("popover-model-list");
   if (!list) return;
   if (modelCatalog.length === 0) {
-    list.innerHTML = `
-      <li class="popover-empty">
-        <span>연결된 AI가 없어요</span>
-        <button type="button" class="btn btn-sm" onclick="openConnectionsFromPicker()">연결 화면으로 가기</button>
-      </li>`;
+    if (modelCatalogLoadError) {
+      list.innerHTML = `
+        <li class="popover-empty">
+          <span>모델 목록을 불러오지 못했어요</span>
+          <button type="button" class="btn btn-sm" onclick="loadModelCatalog()">다시 시도</button>
+        </li>`;
+    } else {
+      list.innerHTML = `
+        <li class="popover-empty">
+          <span>연결된 AI가 없어요</span>
+          <button type="button" class="btn btn-sm" onclick="openConnectionsFromPicker()">연결 화면으로 가기</button>
+        </li>`;
+    }
     return;
   }
   list.innerHTML = `<li class="popover-section-title">구독</li>` + modelCatalog.map((c) => {
     const brand = aiBrand(c.provider);
-    const plan = c.planVerified && c.plan ? c.plan : "요금제 확인 안 됨";
+    const plan = c.planVerified && c.plan ? c.plan.toUpperCase() : (c.planVerified ? "구독 연결됨" : "구독");
     const logo = brand.logo ? `<img src="${brand.logo}" alt="" width="16" height="16">` : "";
     const items = c.models.map((m) => {
       const active = modelSelection && modelSelection.connectionId === c.connectionId && modelSelection.model === m.id;
@@ -1346,7 +1367,18 @@ function switchNavTab(tabId) {
   switchTab(tabId);
 }
 
+function ensureSidebarRunsExpanded() {
+  const runsList = document.getElementById("sidebar-runs-container");
+  const chevron = document.getElementById("runs-chevron");
+  if (runsList && runsList.classList.contains("hidden")) {
+    runsList.classList.remove("hidden");
+    if (chevron) chevron.classList.add("open");
+    try { localStorage.setItem("gon.runs_collapsed", "false"); } catch {}
+  }
+}
+
 function focusSearchInput() {
+  ensureSidebarRunsExpanded();
   const input = document.getElementById("sidebar-search-input");
   if (!input) return;
   input.hidden = false;
@@ -1373,6 +1405,7 @@ function closeSidebarSearch() {
       closeSidebarSearch();
       return;
     }
+    ensureSidebarRunsExpanded();
     renderSidebarSessions(cachedSessions);
   });
   input.addEventListener("keydown", (e) => {
@@ -1558,30 +1591,38 @@ async function pickWorkspaceFolder() {
       await loadRunners();
     }
 
-    if (!currentRunnerDevice) {
-      showToast("PC의 러너를 켜 주세요", "info");
-      switchNavTab("runners");
-      return;
+    let res = null;
+    let data = {};
+
+    if (currentRunnerDevice) {
+      res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
+        method: "POST"
+      });
+      data = await res.json().catch(() => ({}));
     }
 
-    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
-      method: "POST"
-    });
-    const data = await res.json().catch(() => ({}));
+    // Fallback to direct local host folder picker if no remote runner is online
+    if (!res || res.status === 409) {
+      res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/pick-local-folder`, {
+        method: "POST"
+      });
+      data = await res.json().catch(() => ({}));
+    }
 
     if (res.status === 200) {
+      if (data.device) {
+        currentRunnerDevice = data.device;
+      }
       if (data.activePath) {
         currentActiveWorkspacePath = normalizePath(data.activePath);
-        currentAllowedWorkspacePaths = (data.allowedPaths || []).map(normalizePath);
+        currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
         try {
           localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
         } catch {}
         renderWorkspaceChip();
         renderSettingsWorkspaceFolders();
+        showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
       }
-    } else if (res.status === 409) {
-      showToast("PC의 러너를 켜 주세요", "info");
-      switchNavTab("runners");
     } else if (res.status === 422 || res.status === 504) {
       showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
     } else {
@@ -1942,6 +1983,12 @@ async function submitChatPrompt() {
   if (!input) return;
   const requestText = input.value.trim();
   if (!requestText && attachedFiles.length === 0) return;
+
+  if (modelSelection?.connectionId && !currentActiveWorkspacePath) {
+    showToast("작업할 폴더를 먼저 선택해 주세요", "info");
+    await pickWorkspaceFolder();
+    if (!currentActiveWorkspacePath) return;
+  }
 
   const currentAttachments = [...attachedFiles];
   attachedFiles = [];
@@ -2313,7 +2360,14 @@ function connectRunSSE(runId) {
 
   activeEventSource.addEventListener("run:failed", (e) => {
     updateTurnStatus(runId, "작업 실패", false);
-    setResponseText(runId, "작업 실행 중 오류가 발생했습니다. 상단 실행 과정의 터미널 로그를 확인하세요.");
+    let errText = "작업 실행 중 오류가 발생했습니다. 상단 실행 과정의 터미널 로그를 확인하세요.";
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload?.error) {
+        errText = `작업 실행 중 오류가 발생했어요: ${payload.error}`;
+      }
+    } catch {}
+    setResponseText(runId, errText);
     appendLog("run:failed", e.data);
     loadSidebarRuns();
   });
@@ -2342,10 +2396,59 @@ function updateTurnStatus(runId, text, isWorking) {
   }
 }
 
+function renderSafeMarkdown(rawText) {
+  if (!rawText) return "";
+  const codeBlocks = [];
+  const textWithPlaceholders = String(rawText).replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_match, lang, code) => {
+    const idx = codeBlocks.length;
+    const safeLang = escapeHtml(lang || "code");
+    const safeCode = escapeHtml(code.replace(/\n$/, ""));
+    codeBlocks.push(`
+      <div class="md-code-block" style="margin:10px 0;border:1px solid rgb(var(--c-line));border-radius:8px;overflow:hidden;background:rgb(var(--c-sunken));">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid rgb(var(--c-line));font-size:12px;color:rgb(var(--c-ink-sub));">
+          <span>${safeLang}</span>
+          <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;" onclick="copyCodeBlock(this)">복사</button>
+        </div>
+        <pre style="margin:0;padding:12px;overflow-x:auto;font-family:var(--font-mono, monospace);font-size:13px;line-height:1.5;"><code>${safeCode}</code></pre>
+      </div>
+    `);
+    return `@@CODE_BLOCK_${idx}@@`;
+  });
+
+  let html = escapeHtml(textWithPlaceholders);
+  // Inline code
+  html = html.replace(/`([^`\n]+)`/g, '<code style="padding:2px 5px;border-radius:4px;background:rgb(var(--c-sunken));font-family:var(--font-mono, monospace);font-size:0.9em;">$1</code>');
+  // Bold
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  // Headings
+  html = html.replace(/^### (.+)$/gm, '<strong style="display:block;font-size:1.05em;margin:10px 0 4px;">$1</strong>');
+  html = html.replace(/^## (.+)$/gm, '<strong style="display:block;font-size:1.12em;margin:12px 0 6px;">$1</strong>');
+  // Bullet items
+  html = html.replace(/^[•\-*] (.+)$/gm, '<div style="margin-left:10px;">• $1</div>');
+  // Line breaks
+  html = html.replace(/\n/g, "<br>");
+
+  codeBlocks.forEach((blockHtml, idx) => {
+    html = html.replace(`@@CODE_BLOCK_${idx}@@`, blockHtml);
+  });
+
+  return html;
+}
+
+function copyCodeBlock(btn) {
+  const pre = btn?.closest(".md-code-block")?.querySelector("code");
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent || "").then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "복사됨";
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {});
+}
+
 function setResponseText(runId, text) {
   const respEl = document.getElementById(`response-${runId}`);
   if (respEl) {
-    respEl.textContent = text;
+    respEl.innerHTML = renderSafeMarkdown(text);
   }
 }
 
@@ -2599,7 +2702,7 @@ async function renderTurnInThread(thread, run) {
         } else if (ev.eventType === "requirements:refined" && ev.payload?.requirements) {
           renderRequirementsInTurn(run.id, ev.payload.requirements);
         } else if (ev.eventType === "plan:created" && ev.payload?.tasks) {
-          renderTasksFlowInTurn(run.id, ev.payload.tasks);
+          renderTasksInTurn(run.id, ev.payload.tasks);
         } else if (ev.eventType === "run:failed") {
           finalOutput = "작업 중 오류 발생: " + (ev.payload?.error || "실패");
         }
@@ -2682,6 +2785,7 @@ async function detectSubscriptions() {
     });
     if (res.ok) {
       await loadConnections();
+      await loadModelCatalog();
       showToast("구독 AI 목록을 갱신했어요", "success");
     } else {
       showToast("구독 감지 실패", "error");
@@ -2693,6 +2797,59 @@ async function detectSubscriptions() {
       btn.disabled = false;
       btn.textContent = "구독 감지";
     }
+  }
+}
+
+async function loginSubscriptionProvider(provider) {
+  if (!currentWorkspaceId) return;
+  const btn = document.getElementById(`conn-login-btn-${provider}`);
+  const origText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "브라우저 로그인 대기 중…";
+  }
+  showToast("브라우저 창이 열리면 로그인을 완료해 주세요", "info");
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${encodeURIComponent(provider)}/login`, {
+      method: "POST"
+    });
+    const data = await res.json().catch(() => ({}));
+    await loadConnections();
+    await loadModelCatalog();
+    if (res.ok && data.authenticated) {
+      showToast("구독 계정이 성공적으로 연결되었어요!", "success");
+    } else {
+      showToast(data.message || data.error?.message || "로그인을 완료하지 못했어요", "error");
+    }
+  } catch (err) {
+    showToast("로그인 연결 오류: " + err.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+}
+
+async function logoutSubscriptionProvider(provider) {
+  if (!currentWorkspaceId) return;
+  const btn = document.getElementById(`conn-logout-btn-${provider}`);
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/${encodeURIComponent(provider)}/logout`, {
+      method: "POST"
+    });
+    await loadConnections();
+    await loadModelCatalog();
+    if (res.ok) {
+      showToast("구독 연결을 해제했어요", "info");
+    } else {
+      showToast("연결 해제 실패", "error");
+    }
+  } catch (err) {
+    showToast("연결 해제 오류: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -2708,18 +2865,37 @@ async function loadConnections() {
       return;
     }
     grid.innerHTML = data.items.map((c) => {
-      const isNeedsAction = c.status === "needs_action";
-      const dot = isNeedsAction
-        ? `<span class="status-dot warning" title="${escapeHtml(c.details || '조치가 필요해요')}" style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;margin-left:8px;"></span>`
-        : "";
+      const isConnected = c.status === "connected";
+      const planName = c.metadata?.models?.plan ? String(c.metadata.models.plan).toUpperCase() : "";
+      const modelCount = Array.isArray(c.metadata?.models?.models) ? c.metadata.models.models.length : 0;
+      const badge = isConnected
+        ? `<span class="badge badge-accent">${escapeHtml(planName ? `연결됨 · ${planName}` : "연결됨")}</span>`
+        : `<span class="badge badge-sub" style="color:#f59e0b;border-color:rgba(245,158,11,0.4);">로그인 필요</span>`;
+
+      const subtitle = isConnected
+        ? `${modelCount > 0 ? `${modelCount}개 모델 사용 가능 · ` : ""}${escapeHtml(c.details || "정상 연결됨")}`
+        : escapeHtml(c.details || "클릭하여 브라우저 로그인으로 구독을 연결하세요");
+
+      const actionButtons = isConnected
+        ? `<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+             <button type="button" class="btn btn-ghost btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="loginSubscriptionProvider('${escapeHtml(c.provider)}')">재인증</button>
+             ${c.provider !== "google" ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#ef4444;" id="conn-logout-btn-${escapeHtml(c.provider)}" onclick="logoutSubscriptionProvider('${escapeHtml(c.provider)}')">연결 해제</button>` : ""}
+           </div>`
+        : `<button type="button" class="btn btn-primary btn-sm" id="conn-login-btn-${escapeHtml(c.provider)}" onclick="loginSubscriptionProvider('${escapeHtml(c.provider)}')">로그인하여 연결</button>`;
 
       return `
-        <div class="content-card" style="margin-bottom:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border:1px solid rgb(var(--c-line));border-radius:8px;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="22" height="22" style="border-radius:4px;flex-shrink:0;" />
-            <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(c.displayName)}</strong>
-            ${dot}
+        <div class="content-card" style="margin-bottom:10px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid rgb(var(--c-line));border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+            <img src="/logos/${escapeHtml(c.provider)}.svg" alt="" width="26" height="26" style="border-radius:6px;flex-shrink:0;" />
+            <div style="min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <strong style="font-size:15px;color:rgb(var(--c-ink));">${escapeHtml(c.displayName)}</strong>
+                ${badge}
+              </div>
+              <div class="text-faint" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subtitle}</div>
+            </div>
           </div>
+          ${actionButtons}
         </div>
       `;
     }).join("");

@@ -89,16 +89,10 @@ export class AgyProvider implements IProviderAdapter {
     const taskPrompt = `작업 제목: ${task.title}\n핵심 요구역량: ${task.capabilityRequirements.join(", ")}\n이 작업의 코드 변경 요약을 2줄 이내로 간결히 제시해줘.`;
     const output = await this.call(taskPrompt, 25000, model, cwd);
 
-    const filesChanged = [
-      {
-        path: `src/features/${task.taskKey}.ts`,
-        diff: `@@ -0,0 +1,15 @@\n+// Implementation for ${task.title} (orchestrated by agy)\n+export function ${task.taskKey.replace(/-/g, "_")}(): boolean {\n+  return true;\n+}\n`
-      }
-    ];
+    const filesChanged: Array<{ path: string; diff: string }> = [];
     const usage = unmeasuredUsage(workspaceId, runId, task.id, model, Date.now() - startTime);
 
     if (onEvent) {
-      await onEvent("task:diff_generated", { runId, taskId: task.id, files: filesChanged.map((f) => f.path) });
       await onEvent("task:completed", { runId, taskId: task.id, usage });
     }
 

@@ -60,8 +60,9 @@ export class SubscriptionDetector {
     }
 
     const models = installed ? await discoverModels("anthropic", this.run, this.catalog) : undefined;
+    const authenticated = hasConfig || Boolean(models?.planVerified);
     // A verified CLI login counts even when ~/.claude.json is absent.
-    if (installed && models?.planVerified) status = "connected";
+    if (installed && authenticated) status = "connected";
 
     const id = "00000000-0000-7000-8000-c1a0de000001";
     return {
@@ -70,7 +71,7 @@ export class SubscriptionDetector {
       version,
       command: "claude",
       configPath: hasConfig ? claudeJsonPath : undefined,
-      authenticated: hasConfig,
+      authenticated,
       connectionView: {
         id,
         provider: "anthropic",
@@ -252,5 +253,59 @@ export class SubscriptionDetector {
     }
 
     return { status: "connected", details: "CLI active" };
+  }
+
+  /**
+   * Triggers native CLI OAuth login flow (opens browser on local machine)
+   */
+  public async loginSubscription(provider: "anthropic" | "google" | "openai"): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      if (provider === "anthropic") {
+        await this.run("claude", ["auth", "login", "--claudeai"], { timeoutMs: 120000 });
+        return { success: true, message: "Claude 로그인이 완료되었어요." };
+      }
+      if (provider === "openai") {
+        await this.run("codex", ["login"], { timeoutMs: 120000 });
+        return { success: true, message: "Codex 로그인이 완료되었어요." };
+      }
+      if (provider === "google") {
+        await this.run("agy", ["models"], { timeoutMs: 120000 });
+        return { success: true, message: "Gemini (Antigravity) 연결이 확인되었어요." };
+      }
+      return { success: false, message: "지원하지 않는 프로바이더예요." };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || "로그인 중 오류가 발생했어요."
+      };
+    }
+  }
+
+  /**
+   * Logs out from native CLI subscription
+   */
+  public async logoutSubscription(provider: "anthropic" | "google" | "openai"): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      if (provider === "anthropic") {
+        await this.run("claude", ["auth", "logout"], { timeoutMs: 15000 });
+        return { success: true, message: "Claude에서 로그아웃했어요." };
+      }
+      if (provider === "openai") {
+        await this.run("codex", ["logout"], { timeoutMs: 15000 });
+        return { success: true, message: "Codex에서 로그아웃했어요." };
+      }
+      return { success: false, message: "이 서비스는 CLI에서 직접 로그아웃해 주세요." };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || "로그아웃 중 오류가 발생했어요."
+      };
+    }
   }
 }

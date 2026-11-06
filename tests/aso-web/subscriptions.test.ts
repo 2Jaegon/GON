@@ -87,5 +87,70 @@ describe("Subscription Connection & Provider Routing", () => {
     const getBody = JSON.parse(getRes.body);
     expect(getBody.items.some((item: any) => item.mode === "USER_API_KEY")).toBe(false);
   });
+
+  it("POST /connections/:provider/login and logout trigger CLI OAuth commands and sync state", async () => {
+    const calls: string[] = [];
+    let loggedIn = false;
+    const authRunner: CliRunner = async (cmd, args) => {
+      const key = `${cmd} ${args.join(" ")}`;
+      calls.push(key);
+      if (args[0] === "--version") return { stdout: "2.1.0", stderr: "" };
+      if (key === "claude auth login --claudeai") {
+        loggedIn = true;
+        return { stdout: "Logged in", stderr: "" };
+      }
+      if (key === "claude auth status") {
+        return {
+          stdout: JSON.stringify({ loggedIn, subscriptionType: loggedIn ? "pro" : null }),
+          stderr: ""
+        };
+      }
+      if (key === "claude auth logout") {
+        loggedIn = false;
+        return { stdout: "Logged out", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    };
+
+    const db = createDatabase(":memory:");
+    const { server } = await createAuthedServer({ db, logger: false, cliRunner: authRunner });
+    const wsId = "00000000-0000-7000-8000-000000000002";
+
+    const loginRes = await server.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${wsId}/connections/anthropic/login`
+    });
+    expect(loginRes.statusCode).toBe(200);
+    expect(calls).toContain("claude auth login --claudeai");
+    const loginBody = JSON.parse(loginRes.body);
+    expect(loginBody.success).toBe(true);
+    const claudeConn = loginBody.items.find((c: any) => c.provider === "anthropic");
+    expect(claudeConn.status).toBe("connected");
+
+    const logoutRes = await server.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${wsId}/connections/anthropic/logout`
+    });
+    expect(logoutRes.statusCode).toBe(200);
+    expect(calls).toContain("claude auth logout");
+    const logoutBody = JSON.parse(logoutRes.body);
+    const claudeAfterLogout = logoutBody.items.find((c: any) => c.provider === "anthropic");
+    expect(claudeAfterLogout.status).toBe("needs_action");
+  });
+
+  it("GET /models auto-syncs local subscriptions even when /connections was not called first", async () => {
+    const db = createDatabase(":memory:");
+    const { server } = await createAuthedServer({ db, logger: false, cliRunner });
+    const wsId = "00000000-0000-7000-8000-000000000002";
+
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/v1/workspaces/${wsId}/models`
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(Array.isArray(body.subscription)).toBe(true);
+    expect(body.subscription.length).toBeGreaterThan(0);
+  });
 });
 

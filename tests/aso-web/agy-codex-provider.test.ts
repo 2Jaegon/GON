@@ -100,6 +100,7 @@ describe("AgyProvider", () => {
     expect(calls[0].opts.cwd).toBe("C:\\proj");
     expect(r.output).toBe("done");
     expect(r.usage.model).toBe("gemini-4-argon-low");
+    expect(r.filesChanged).toEqual([]);
   });
 
   it("execute() throws ProviderCallError when the CLI fails", async () => {
@@ -165,6 +166,7 @@ describe("CodexProvider", () => {
     expect(calls[0].opts.cwd).toBe("C:\\proj");
     expect(r.output).toBe("done");
     expect(r.usage.provider).toBe("openai");
+    expect(r.filesChanged).toEqual([]);
   });
 
   it("never passes a 'dangerously' flag", async () => {

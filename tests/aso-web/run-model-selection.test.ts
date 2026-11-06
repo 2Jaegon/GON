@@ -225,6 +225,42 @@ describe("run with a selected subscription model", () => {
     await expectFailedWithEvent(server, db, runId);
     expect(calls.some((c) => c.cmd === "claude" && c.args[0] === "-p")).toBe(false);
   });
+
+  it("includes prior session conversation history on subsequent turns in the same session", async () => {
+    const calls: Call[] = [];
+    const { db, server, connectionId } = await setup(calls);
+    await pairRunnerWithFolder(server, tmpFolder());
+
+    const sessionId = "sess-multi-turn-test";
+    const first = await postRun(server, {
+      connectionId,
+      model: "sonnet",
+      sessionId,
+      request: "첫 번째 질문이야"
+    });
+    expect(first.statusCode).toBe(201);
+    const firstRunId = JSON.parse(first.body).runId;
+    await waitForStatus(db, firstRunId, ["completed", "failed"]);
+
+    const second = await postRun(server, {
+      connectionId,
+      model: "sonnet",
+      sessionId,
+      request: "방금 내가 뭐라고 물어봤지?"
+    });
+    expect(second.statusCode).toBe(201);
+    const secondRunId = JSON.parse(second.body).runId;
+    await waitForStatus(db, secondRunId, ["completed", "failed"]);
+
+    const chatCalls = calls.filter((c) => c.cmd === "claude" && c.args[0] === "-p");
+    expect(chatCalls.length).toBe(2);
+    expect(chatCalls[0].args[chatCalls[0].args.length - 1]).toBe("첫 번째 질문이야");
+    const secondPrompt = chatCalls[1].args[chatCalls[1].args.length - 1];
+    expect(secondPrompt).toContain("[이전 대화 기록]");
+    expect(secondPrompt).toContain("사용자: 첫 번째 질문이야");
+    expect(secondPrompt).toContain("AI: 안녕하세요");
+    expect(secondPrompt).toContain("[현재 질문]\n방금 내가 뭐라고 물어봤지?");
+  });
 });
 
 describe("resolveActiveWorkspacePath", () => {

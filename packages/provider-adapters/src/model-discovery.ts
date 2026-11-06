@@ -43,7 +43,8 @@ export function parseClaudeAuthStatus(stdout: string): { loggedIn: boolean; subs
 export function loadModelCatalog(file = path.resolve(process.cwd(), "config/model-catalog.json")): ModelCatalog {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8")) as ModelCatalog;
-  } catch {
+  } catch (err: any) {
+    console.warn(`[model-discovery] Failed to load model catalog at ${file}: ${err?.message || err}`);
     const empty = { source: "", checkedAt: "unknown", models: [] };
     return { claude: empty, codex: empty };
   }

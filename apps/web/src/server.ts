@@ -26,6 +26,10 @@ export async function createWebServer() {
       return reply.code(404).send("Not Found");
     }
 
+    if (decodedPath.includes("\\") || decodedPath.includes("\0")) {
+      return reply.code(404).send("Not Found");
+    }
+
     const filePath = path.resolve(PUBLIC_DIR, "." + decodedPath);
     if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
       return reply.code(404).send("Not Found");
