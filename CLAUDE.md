@@ -45,7 +45,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - `packages/`: `contracts`(zod 스키마) → `security` → `database` → `aso-core` → `execution-protocol` → `provider-adapters`
    - `apps/`: `api`(fastify), `web`, `worker`, `local-runner`(`aso-runner` bin)
    - `apps/web/src/server.ts`는 정적 파일 서버일 뿐이고, UI는 `apps/web/public/`의 빌드 없는 바닐라 JS(`app.js`, `index.html`, `style.css`)입니다. UI 수정은 `public/`을 직접 고칩니다.
-   - 실행 흐름: `apps/api/src/services/orchestrator-service.ts`가 `@aso/core`(IntentRefiner → TaskClassifier → DAGPlanner → SkillRouter)로 계획을 세우고, `ProviderRegistry`가 claude·codex·agy CLI 어댑터(`CliRunner`로 실행)를 고릅니다. `auto`는 테스트(`VITEST`/`NODE_ENV=test`)에서 `MockProvider`, 그 외엔 agy입니다. `local-runner`는 WebSocket `/api/v1/runner/ws`(`runner-gateway.ts`)로 붙어 서명된 작업 계약을 `@aso/execution-protocol`로 검증하고, `@aso/security`(경로 가드·명령 위험도·비밀값 마스킹)를 거쳐 실행합니다.
+   - 실행 흐름: `apps/api/src/services/orchestrator-service.ts`가 `@aso/core`(IntentRefiner → TaskClassifier → DAGPlanner → SkillRouter)로 계획을 세우고, `ProviderRegistry`가 claude·codex·agy CLI 어댑터(`CliRunner`로 실행)를 고릅니다. Claude 연결과 작업 폴더가 있을 때의 대화는 `AgentService`가 `claude -p --output-format stream-json` 에이전트 세션으로 직접 실행하며, 승인 카드와 세션 이어가기를 지원합니다. `auto`는 테스트(`VITEST`/`NODE_ENV=test`)에서 `MockProvider`, 그 외엔 agy입니다. `local-runner`는 WebSocket `/api/v1/runner/ws`(`runner-gateway.ts`)로 붙어 서명된 작업 계약을 `@aso/execution-protocol`로 검증하고, `@aso/security`(경로 가드·명령 위험도·비밀값 마스킹)를 거쳐 실행합니다.
    - 저장소: `@aso/database`의 `MemoryDatabase`는 `NODE_ENV=test`일 때만 순수 인메모리이고, 그 외에는 `.aso/db.json`(또는 `ASO_DB_FILE`)에 세션·실행 기록을 저장합니다. `DATABASE_URL`은 Supabase 사용자 조회(`apps/api/src/auth/supabase-users.ts`)에만 쓰이며, Postgres/Redis/MinIO(`infra/compose.yaml`)는 필수가 아닙니다.
 
 ## 코드 작성 원칙 (Ponytail + Karpathy)
