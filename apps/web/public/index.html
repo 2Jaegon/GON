@@ -6,7 +6,7 @@
   <title>Gon ASO — Adaptive Skill Orchestrator</title>
   <!-- Pretendard Web Font -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-  <link rel="stylesheet" href="/style.css?v=20261106-7">
+  <link rel="stylesheet" href="/style.css?v=20261106-8">
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -332,7 +332,12 @@
 
           <!-- Floating Composer (Centered in empty-mode, pinned at bottom in active-mode) -->
           <div class="composer-container" id="composer-container">
-            <div class="composer-wrapper" id="composer-wrapper">
+            <div class="composer-wrapper" id="composer-wrapper" style="position: relative;">
+              <!-- Slash Skills Reference Popover -->
+              <div id="slash-skills-popover" class="model-picker-popover hidden" role="listbox" aria-label="스킬 참조 선택" style="bottom: calc(100% + 8px); left: 12px; right: auto; width: 320px; max-height: 260px; overflow-y: auto; z-index: 60;">
+                <ul class="popover-model-list" id="slash-skills-list"></ul>
+              </div>
+
               <!-- File / Image Attachments Preview Tray -->
               <div class="composer-attachments-bar hidden" id="composer-attachments-bar"></div>
 
@@ -740,7 +745,7 @@
 
             <div class="local-folder-path-bar">
               <button type="button" class="btn btn-ghost btn-sm" id="local-folder-up-btn" onclick="browseLocalParentFolder()" title="상위 폴더로 이동">↑ 상위</button>
-              <input type="text" id="local-folder-path-input" class="local-folder-path-input" placeholder="C:/Users/..." onkeydown="if(event.key==='Enter'){event.preventDefault();browseLocalFolderByInput();}" />
+              <input type="text" id="local-folder-path-input" class="local-folder-path-input" placeholder="C:/Users/..." onkeydown="if(event.key==='Enter'){event.preventDefault();browseLocalFolderByInput();}else if(event.key==='Escape'){event.preventDefault();closeRunnerRegisterModal();}" />
               <button type="button" class="btn btn-ghost btn-sm" onclick="browseLocalFolderByInput()">이동</button>
             </div>
 
@@ -752,9 +757,6 @@
               <button type="button" class="btn btn-primary btn-sm" id="confirm-local-folder-btn" onclick="confirmSelectedLocalFolder()" style="flex: 1; justify-content: center;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 <span>현재 폴더를 작업 폴더로 선택</span>
-              </button>
-              <button type="button" class="btn btn-ghost btn-sm" id="modal-pick-local-folder-btn" onclick="pickLocalHostFolderFromModal()" title="Windows 기본 폴더 선택 창 띄우기">
-                <span>Windows 창 열기</span>
               </button>
             </div>
           </div>
@@ -785,7 +787,7 @@
     </div>
   </div>
 
-  <script type="module" src="/session-search.js?v=20261106-7"></script>
-  <script src="/app.js?v=20261106-7"></script>
+  <script type="module" src="/session-search.js?v=20261106-8"></script>
+  <script src="/app.js?v=20261106-8"></script>
 </body>
 </html>

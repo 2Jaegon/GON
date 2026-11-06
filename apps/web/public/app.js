@@ -556,9 +556,71 @@ function closeSettingsModalOnBackdrop(e) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
+  if (e.key !== "Escape") return;
+
+  const confirmModal = document.getElementById("confirm-dialog-backdrop");
+  if (confirmModal && !confirmModal.classList.contains("hidden")) {
+    return;
+  }
+
+  const runnerModal = document.getElementById("runner-register-modal-backdrop");
+  if (runnerModal && !runnerModal.classList.contains("hidden")) {
+    e.preventDefault();
+    closeRunnerRegisterModal();
+    return;
+  }
+
+  const settingsModal = document.getElementById("settings-modal-backdrop");
+  if (settingsModal && !settingsModal.classList.contains("hidden")) {
+    e.preventDefault();
     closeSettingsModal();
+    return;
+  }
+
+  const googleModal = document.getElementById("google-connect-modal-backdrop");
+  if (googleModal && !googleModal.classList.contains("hidden")) {
+    e.preventDefault();
+    closeGoogleConnectModal();
+    return;
+  }
+
+  const modelPopover = document.getElementById("model-picker-popover");
+  if (modelPopover && !modelPopover.classList.contains("hidden")) {
+    e.preventDefault();
+    closeModelPickerPopover();
+    return;
+  }
+
+  const slashPopover = document.getElementById("slash-skills-popover");
+  if (slashPopover && !slashPopover.classList.contains("hidden")) {
+    e.preventDefault();
+    closeSlashSkillsPopover();
+    return;
+  }
+
+  const profileMenu = document.getElementById("profile-dropdown-menu");
+  if (profileMenu && !profileMenu.classList.contains("hidden")) {
+    e.preventDefault();
     closeProfileDropdown();
+    return;
+  }
+
+  const searchInput = document.getElementById("sidebar-search-input");
+  if (searchInput && !searchInput.hidden) {
+    e.preventDefault();
+    closeSidebarSearch();
+    return;
+  }
+
+  if (typeof attachedFiles !== "undefined" && Array.isArray(attachedFiles) && attachedFiles.length > 0) {
+    e.preventDefault();
+    attachedFiles = [];
+    renderAttachmentsPreview();
+    return;
+  }
+
+  if (typeof isChatExpanded !== "undefined" && isChatExpanded) {
+    toggleChatExpand();
   }
 });
 
@@ -870,12 +932,6 @@ function toggleChatExpand() {
   };
   requestAnimationFrame(syncStep);
 }
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && isChatExpanded) {
-    toggleChatExpand();
-  }
-});
 
 // ==========================================================================
 // Model Picker & Reasoning Effort (subscription models from GET /models)
@@ -2078,38 +2134,6 @@ function copyModalPairingCommand() {
   }).catch(() => {});
 }
 
-async function pickLocalHostFolderFromModal() {
-  if (!currentWorkspaceId) return;
-  const btn = document.getElementById("modal-pick-local-folder-btn");
-  if (btn) btn.disabled = true;
-  try {
-    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/pick-local-folder`, {
-      method: "POST"
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 200 && data.activePath) {
-      if (data.device) currentRunnerDevice = data.device;
-      currentActiveWorkspacePath = normalizePath(data.activePath);
-      currentAllowedWorkspacePaths = (data.allowedPaths || [data.activePath]).map(normalizePath);
-      try {
-        localStorage.setItem("gon.active_workspace_path", currentActiveWorkspacePath);
-      } catch {}
-      renderWorkspaceChip();
-      renderSettingsWorkspaceFolders();
-      closeRunnerRegisterModal();
-      showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
-    } else if (res.status === 200 && data.cancelled) {
-      showToast("Windows 폴더 선택 창이 닫혔어요. 위 폴더 목록에서 직접 선택하실 수도 있어요.", "info");
-    } else if (res.status !== 200) {
-      showToast(data.error?.message || "폴더를 선택하지 못했어요", "error");
-    }
-  } catch (err) {
-    showToast("폴더 선택 오류: " + err.message, "error");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
 async function pickWorkspaceFolder() {
   openRunnerRegisterModal();
 }
@@ -2269,14 +2293,104 @@ async function loadProjects() {
 // Composer Listeners & New Conversation
 // ==========================================================================
 
+let cachedSkillCatalog = null;
+
+async function ensureSkillCatalogLoaded() {
+  if (Array.isArray(cachedSkillCatalog)) return cachedSkillCatalog;
+  try {
+    const res = await apiFetch(`${API_URL}/skills`);
+    if (res.ok) {
+      const data = await res.json();
+      cachedSkillCatalog = Array.isArray(data.items) ? data.items : [];
+      return cachedSkillCatalog;
+    }
+  } catch {}
+  cachedSkillCatalog = [];
+  return cachedSkillCatalog;
+}
+
+function closeSlashSkillsPopover() {
+  const popover = document.getElementById("slash-skills-popover");
+  if (popover) popover.classList.add("hidden");
+}
+
+function selectSlashSkill(skillName) {
+  const textarea = document.getElementById("run-request-input");
+  if (textarea) {
+    const val = textarea.value;
+    const replaced = val.replace(/(^|\s)\/[^\s]*$/, `$1/${skillName} `);
+    textarea.value = replaced === val ? `/${skillName} ` : replaced;
+    textarea.focus();
+  }
+  closeSlashSkillsPopover();
+}
+
+async function updateSlashSkillsPopover(rawValue) {
+  const popover = document.getElementById("slash-skills-popover");
+  const list = document.getElementById("slash-skills-list");
+  if (!popover || !list) return;
+
+  const match = String(rawValue || "").match(/(?:^|\s)\/([^\s]*)$/);
+  if (!match) {
+    closeSlashSkillsPopover();
+    return;
+  }
+
+  const query = (match[1] || "").toLowerCase();
+  const skills = await ensureSkillCatalogLoaded();
+  const filtered = skills.filter((s) => {
+    const name = String(s.name || s.id || "").toLowerCase();
+    const desc = String(s.description || "").toLowerCase();
+    return !query || name.includes(query) || desc.includes(query);
+  });
+
+  if (filtered.length === 0) {
+    closeSlashSkillsPopover();
+    return;
+  }
+
+  list.innerHTML = `<li class="popover-section-title">스킬 참조 (/ 입력 · Esc 닫기)</li>` + filtered.slice(0, 12).map((s) => {
+    const name = s.name || s.id;
+    return `
+      <li class="popover-model-item" onclick="selectSlashSkill('${escapeHtml(name)}')">
+        <div class="model-meta">
+          <span class="model-name">/${escapeHtml(name)}</span>
+          <span class="model-desc" style="display:block;font-size:11px;color:rgb(var(--c-ink-faint));">${escapeHtml(s.description || "")}</span>
+        </div>
+      </li>
+    `;
+  }).join("");
+  popover.classList.remove("hidden");
+}
+
+document.addEventListener("click", (e) => {
+  const popover = document.getElementById("slash-skills-popover");
+  const wrapper = document.getElementById("composer-wrapper");
+  if (popover && !popover.classList.contains("hidden")) {
+    if (!wrapper || !wrapper.contains(e.target)) {
+      closeSlashSkillsPopover();
+    }
+  }
+});
+
 function setupComposerListeners() {
   const textarea = document.getElementById("run-request-input");
   if (!textarea) return;
 
   textarea.addEventListener("keydown", (e) => {
     if (e.isComposing) return;
+    if (e.key === "Escape") {
+      const slashPopover = document.getElementById("slash-skills-popover");
+      if (slashPopover && !slashPopover.classList.contains("hidden")) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSlashSkillsPopover();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      closeSlashSkillsPopover();
       submitChatPrompt();
     }
   });
@@ -2284,6 +2398,7 @@ function setupComposerListeners() {
   textarea.addEventListener("input", () => {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+    updateSlashSkillsPopover(textarea.value);
   });
 }
 
