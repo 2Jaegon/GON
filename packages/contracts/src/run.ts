@@ -16,8 +16,11 @@ export const RunStatusSchema = z.enum([
 ]);
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
-export const ExecutionModeSchema = z.enum(["chat", "fast", "standard", "deep", "auto"]);
+export const ExecutionModeSchema = z.enum(["chat", "fast", "standard", "deep", "auto", "agent"]);
 export type ExecutionMode = z.infer<typeof ExecutionModeSchema>;
+
+export const AgentApprovalDTOSchema = z.object({ decision: z.enum(["allow", "deny"]) });
+export type AgentApprovalDTO = z.infer<typeof AgentApprovalDTOSchema>;
 
 export const RunBudgetSchema = z.object({
   maxWallTimeSeconds: z.number().int().positive().default(1800),

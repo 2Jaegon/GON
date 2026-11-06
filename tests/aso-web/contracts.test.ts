@@ -5,10 +5,19 @@ import {
   RunSchema,
   RunTaskSchema,
   CreateRunDTOSchema,
+  AgentApprovalDTOSchema,
   ProviderConnectionViewSchema
 } from "@aso/contracts";
 
 describe("Contracts Zod Schemas", () => {
+  it("accepts the agent execution mode and validates the agent approval DTO", () => {
+    expect(CreateRunDTOSchema.safeParse({ request: "x", executionMode: "agent" }).success).toBe(true);
+    expect(AgentApprovalDTOSchema.safeParse({ decision: "allow" }).success).toBe(true);
+    expect(AgentApprovalDTOSchema.safeParse({ decision: "deny" }).success).toBe(true);
+    expect(AgentApprovalDTOSchema.safeParse({ decision: "maybe" }).success).toBe(false);
+    expect(AgentApprovalDTOSchema.safeParse({}).success).toBe(false);
+  });
+
   it("accepts every effort level the CLIs offer and rejects unknown ones", () => {
     for (const effort of ["low", "medium", "high", "xhigh", "max", "ultra"]) {
       expect(CreateRunDTOSchema.safeParse({ request: "x", effort }).success).toBe(true);
