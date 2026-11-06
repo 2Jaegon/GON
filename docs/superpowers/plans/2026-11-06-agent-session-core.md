@@ -187,3 +187,10 @@
   7. agy 연결로 같은 질문 → 기존 방식으로 답한다.
 - [ ] **Step 3: 결과 기록** — 통과·실패 항목과 시작 지연(훅 영향) 시간을 계획 문서 아래 한 줄로 적고, 실패가 있으면 고칠 것을 목록으로 남긴다.
 - [ ] **Step 4: Commit** `docs: describe the agent execution path`.
+
+## 계획 보정 (2026-11-06 실측 반영 — 상세는 `2026-11-06-handoff-master-plan.md` 5절)
+
+- 작업 2: 파일 도구 승인 규칙은 `Edit(//<소문자 드라이브>/<슬래시 경로>)`(`Write(<절대경로>)`는 실측에서 허용 안 됨); `AgentEvent`에 `{kind:"tool_done"; id}` 추가; `isResumeFailure = /No conversation found/i`; `AskUserQuestion`·`EnterPlanMode`·`ExitPlanMode` 금지 후보; `.env` 차단·`Bash(...)` 규칙 실제 시험 추가.
+- 작업 3: 도구 호출 진행 중에는 무응답 타이머 정지(총 시간 상한은 유지).
+- 작업 4: 이벤트 요약·승인 항목은 `redactSecrets` 통과, 파일 내용 미저장; 텍스트 첨부는 프롬프트에 붙이고 이미지 첨부는 미지원 안내.
+- 작업 7: 확인 항목 8번 "`.env`를 읽어 달라고 하면 막힌다" 추가.
