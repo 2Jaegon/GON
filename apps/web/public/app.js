@@ -2128,6 +2128,7 @@ async function confirmSelectedLocalFolder() {
       renderSettingsWorkspaceFolders();
       closeRunnerRegisterModal();
       showToast("작업 폴더가 설정되었어요: " + currentActiveWorkspacePath, "success");
+      checkFolderSeen(currentActiveWorkspacePath);
     } else {
       showToast(data?.error?.message || "폴더 설정에 실패했어요", "error");
     }
@@ -2615,6 +2616,9 @@ async function submitChatPrompt() {
     await pickWorkspaceFolder();
     if (!currentActiveWorkspacePath) return;
   }
+  if (currentActiveWorkspacePath) {
+    checkFolderSeen(currentActiveWorkspacePath);
+  }
 
   const currentAttachments = [...attachedFiles];
   attachedFiles = [];
@@ -2709,9 +2713,16 @@ async function submitChatPrompt() {
           </div>
         </div>
 
+        <!-- Agent Tool Steps & Approvals -->
+        <div class="agent-steps hidden" id="agent-steps-${tempId}"></div>
+        <div class="agent-approval-container hidden" id="agent-approval-container-${tempId}"></div>
+
         <!-- Assistant Response Text (Clean Markdown without box border) -->
         <div class="report-viewer" id="response-${tempId}">
           ${isChat ? `${escapeHtml(aiBrand(chatProvider).name)}가 답변을 쓰고 있어요…` : '작업 환경을 준비하고 있습니다...'}
+        </div>
+        <div class="turn-actions-bar" id="turn-actions-${tempId}">
+          <button type="button" class="btn btn-ghost btn-sm btn-stop" id="btn-stop-${tempId}" onclick="cancelAgentRun('${tempId}')">중단</button>
         </div>
       </div>
     </div>
@@ -2802,7 +2813,8 @@ function rebindTurnIds(oldId, newId) {
     "process-wrap-", "dot-", "process-status-text-", "arrow-",
     "drawer-", "sec-req-", "req-content-", "sec-tasks-",
     "tasks-content-", "gate-", "term-", "sec-diff-",
-    "diff-content-", "response-"
+    "diff-content-", "response-", "agent-steps-",
+    "agent-approval-container-", "turn-actions-", "btn-stop-"
   ];
 
   prefixes.forEach((prefix) => {
@@ -2817,6 +2829,10 @@ function rebindTurnIds(oldId, newId) {
   const gateBtn = turn.querySelector(".approval-gate-box button");
   if (gateBtn) {
     gateBtn.onclick = () => approvePlanInTurn(newId);
+  }
+  const stopBtn = turn.querySelector(".btn-stop");
+  if (stopBtn) {
+    stopBtn.onclick = () => cancelAgentRun(newId);
   }
 }
 
@@ -2858,9 +2874,82 @@ function connectRunSSE(runId) {
         const wrap = document.getElementById(`process-wrap-${runId}`);
         if (wrap) wrap.classList.add("hidden");
         updateCobwebBadge("일상 대화");
+      } else if (payload.mode === "agent") {
+        const wrap = document.getElementById(`process-wrap-${runId}`);
+        if (wrap) wrap.classList.add("hidden");
+        const steps = document.getElementById(`agent-steps-${runId}`);
+        if (steps) steps.classList.remove("hidden");
+        updateCobwebBadge("에이전트 실행");
       }
     } catch {}
     appendLog("run:classified", e.data);
+  });
+
+  activeEventSource.addEventListener("agent:tool", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      const steps = document.getElementById(`agent-steps-${runId}`);
+      if (steps) {
+        steps.classList.remove("hidden");
+        if (window.agentToolRowHtml) {
+          steps.insertAdjacentHTML("beforeend", window.agentToolRowHtml(payload));
+        }
+      }
+      const wrap = document.getElementById(`process-wrap-${runId}`);
+      if (wrap) wrap.classList.add("hidden");
+      updateTurnStatus(runId, `도구 실행: ${payload.name || ""}`, true);
+      scrollChatToBottom();
+    } catch {}
+    appendLog("agent:tool", e.data);
+  });
+
+  activeEventSource.addEventListener("agent:tool_done", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      const toolRow = document.getElementById(`agent-tool-${payload.id}`);
+      if (toolRow) {
+        toolRow.querySelector(".agent-tool-spinner")?.classList.add("hidden");
+        toolRow.querySelector(".agent-tool-check")?.classList.remove("hidden");
+      }
+    } catch {}
+    appendLog("agent:tool_done", e.data);
+  });
+
+  activeEventSource.addEventListener("agent:approval_needed", (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      const container = document.getElementById(`agent-approval-container-${runId}`);
+      if (container) {
+        container.classList.remove("hidden");
+        if (window.agentApprovalCardHtml) {
+          container.innerHTML = window.agentApprovalCardHtml(runId, payload);
+        }
+      }
+      updateTurnStatus(runId, "승인 대기 중", false);
+      scrollChatToBottom();
+    } catch {}
+    appendLog("agent:approval_needed", e.data);
+  });
+
+  activeEventSource.addEventListener("agent:approval_resolved", (e) => {
+    try {
+      const card = document.getElementById(`agent-approval-${runId}`);
+      if (card) card.remove();
+      const container = document.getElementById(`agent-approval-container-${runId}`);
+      if (container) container.classList.add("hidden");
+      updateTurnStatus(runId, "도구 실행 계속 진행 중...", true);
+    } catch {}
+    appendLog("agent:approval_resolved", e.data);
+  });
+
+  activeEventSource.addEventListener("run:cancelled", (e) => {
+    updateTurnStatus(runId, "중단됨", false);
+    const stopBtn = document.getElementById(`btn-stop-${runId}`);
+    if (stopBtn) stopBtn.classList.add("hidden");
+    const container = document.getElementById(`agent-approval-container-${runId}`);
+    if (container) container.classList.add("hidden");
+    appendLog("run:cancelled", e.data);
+    loadSidebarRuns();
   });
 
   activeEventSource.addEventListener("chat:delta", (e) => {
@@ -2991,6 +3080,8 @@ function connectRunSSE(runId) {
     } catch {
       updateTurnStatus(runId, "작업 및 검증 완료", false);
     }
+    const stopBtn = document.getElementById(`btn-stop-${runId}`);
+    if (stopBtn) stopBtn.classList.add("hidden");
     appendLog("run:completed", "작업 완료");
     updateCobwebBadge("대기 중");
     await loadSidebarRuns();
@@ -3007,6 +3098,8 @@ function connectRunSSE(runId) {
         errText = `작업 실행 중 오류가 발생했어요: ${payload.error}`;
       }
     } catch {}
+    const stopBtn = document.getElementById(`btn-stop-${runId}`);
+    if (stopBtn) stopBtn.classList.add("hidden");
     setResponseText(runId, errText);
     appendLog("run:failed", e.data);
     loadSidebarRuns();
@@ -3018,6 +3111,59 @@ function connectRunSSE(runId) {
       appendLog(type, e.data);
     });
   });
+}
+
+window.resolveAgentApproval = async function (runId, decision) {
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/agent/approval`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error?.message || "승인 처리에 실패했어요", "error");
+    } else {
+      const card = document.getElementById(`agent-approval-${runId}`);
+      if (card) card.remove();
+      const container = document.getElementById(`agent-approval-container-${runId}`);
+      if (container) container.classList.add("hidden");
+    }
+  } catch (err) {
+    showToast("네트워크 오류: " + err.message, "error");
+  }
+};
+
+window.cancelAgentRun = async function (runId) {
+  try {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/cancel`, {
+      method: "POST"
+    });
+    if (res.ok) {
+      showToast("작업을 중단했어요", "info");
+      const stopBtn = document.getElementById(`btn-stop-${runId}`);
+      if (stopBtn) stopBtn.classList.add("hidden");
+      updateTurnStatus(runId, "중단됨", false);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error?.message || "중단할 수 없어요", "error");
+    }
+  } catch (err) {
+    showToast("네트워크 오류: " + err.message, "error");
+  }
+};
+
+function checkFolderSeen(folderPath) {
+  if (!folderPath) return;
+  try {
+    const raw = localStorage.getItem("gon.agent_folders_seen");
+    const seen = raw ? JSON.parse(raw) : [];
+    if (!seen.includes(folderPath)) {
+      seen.push(folderPath);
+      localStorage.setItem("gon.agent_folders_seen", JSON.stringify(seen));
+      showToast("이 폴더의 .claude 설정과 훅이 실행돼요", "info");
+    }
+  } catch {}
 }
 
 function updateTurnStatus(runId, text, isWorking) {
