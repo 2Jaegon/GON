@@ -59,7 +59,11 @@ export interface AgentRunOptions {
 export function buildAgentArgs(o: AgentRunOptions): string[] {
   const allowed = [...AGENT_SAFE_TOOLS, ...(o.extraAllowed ?? [])];
   if (o.appendSystemPrompt && o.appendSystemPrompt.includes("gen-image.mjs")) {
-    allowed.push("Bash(node *gen-image.mjs:*)");
+    allowed.push(
+      "Bash(node *gen-image.mjs:*)",
+      "Bash(node *gen-image.mjs*)",
+      "Bash(node *tools/gen-image.mjs:*)"
+    );
   }
 
   const args = [

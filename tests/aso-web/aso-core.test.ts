@@ -25,6 +25,9 @@ describe("ASO Core Orchestration Engine", () => {
 
     const standard = classifier.classify("금융 공시 검색 컴포넌트 추가 및 API 엔드포인트 연동");
     expect(standard.mode).toBe("standard");
+
+    const imgRequest = classifier.classify("간단하게 강아지 이미지 생성해줘");
+    expect(imgRequest.mode).toBe("standard");
   });
 
   it("refines raw user request into structured requirements", () => {

@@ -80,6 +80,15 @@ export class TaskClassifier {
       "코드 작성",
       "코드 수정",
       "코드 추가",
+      "이미지",
+      "사진",
+      "그림",
+      "생성",
+      "그려",
+      "디자인",
+      "배너",
+      "일러스트",
+      "포토",
       "feature",
       "bugfix",
       "endpoint",
@@ -87,7 +96,13 @@ export class TaskClassifier {
       "api",
       "build",
       "create",
-      "implement"
+      "implement",
+      "image",
+      "photo",
+      "picture",
+      "generate",
+      "design",
+      "illustration"
     ];
     for (const kw of standardKeywords) {
       if (text.includes(kw)) indicators.push(`standard:${kw}`);
