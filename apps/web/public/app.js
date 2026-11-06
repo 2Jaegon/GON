@@ -87,7 +87,7 @@ function switchAuthMode(mode) {
     nameGroup.classList.toggle("hidden", !isSignup);
   }
   if (submitBtn) {
-    submitBtn.textContent = isSignup ? "계정 만들기 (Supabase 등록)" : "로그인";
+    submitBtn.textContent = isSignup ? "회원가입" : "로그인";
   }
   if (switchPrompt) {
     switchPrompt.textContent = isSignup ? "이미 계정이 있으신가요?" : "계정이 없으신가요?";
@@ -171,7 +171,7 @@ async function handleEmailAuthSubmit(event) {
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = currentAuthMode === "signup" ? "계정 만들기 (Supabase 등록)" : "로그인";
+      submitBtn.textContent = currentAuthMode === "signup" ? "회원가입" : "로그인";
     }
   }
 }
@@ -182,8 +182,7 @@ async function initGoogleSignIn() {
   const errEl = document.getElementById("login-error-message");
   const warnEl = document.getElementById("login-config-warning");
   const btnContainer = document.getElementById("google-signin-btn-container");
-  const sbBadge = document.getElementById("auth-supabase-badge");
-  const googleBadge = document.getElementById("auth-google-badge");
+  const fallbackBtn = document.getElementById("google-fallback-btn");
 
   if (errEl) errEl.classList.add("hidden");
   if (warnEl) warnEl.classList.add("hidden");
@@ -199,31 +198,16 @@ async function initGoogleSignIn() {
     const googleClientId = configData.googleClientId || "";
     currentGoogleClientId = googleClientId;
 
-    if (sbBadge) {
-      if (configData.supabase && configData.supabase.is_supabase) {
-        sbBadge.textContent = `Supabase 연결됨 (${configData.supabase.project_ref || "Cloud"})`;
-        sbBadge.classList.add("connected");
-      } else {
-        sbBadge.textContent = "로컬 스토리지 모드";
-        sbBadge.classList.remove("connected");
-      }
-    }
-
-    if (googleBadge) {
-      if (googleClientId) {
-        googleBadge.textContent = "활성화됨";
-        googleBadge.classList.add("connected");
-      } else {
-        googleBadge.textContent = "Client ID 미설정";
-        googleBadge.classList.remove("connected");
-      }
-    }
-
     if (!googleClientId || googleClientId.trim() === "") {
-      if (btnContainer) btnContainer.innerHTML = "";
+      if (btnContainer) {
+        btnContainer.innerHTML = "";
+        btnContainer.classList.add("hidden");
+      }
+      if (fallbackBtn) fallbackBtn.classList.remove("hidden");
       return;
     }
 
+    let retryCount = 0;
     function checkGisLoaded() {
       if (window.google && window.google.accounts && window.google.accounts.id) {
         try {
@@ -232,7 +216,9 @@ async function initGoogleSignIn() {
             callback: handleGoogleSignInCallback,
           });
           isGisInitialized = true;
+          if (fallbackBtn) fallbackBtn.classList.add("hidden");
           if (btnContainer) {
+            btnContainer.classList.remove("hidden");
             btnContainer.innerHTML = "";
             window.google.accounts.id.renderButton(btnContainer, {
               theme: "outline",
@@ -245,9 +231,13 @@ async function initGoogleSignIn() {
           }
         } catch (gisErr) {
           console.warn("Google GIS init warning:", gisErr);
+          if (fallbackBtn) fallbackBtn.classList.remove("hidden");
         }
-      } else {
+      } else if (retryCount < 20) {
+        retryCount += 1;
         setTimeout(checkGisLoaded, 150);
+      } else {
+        if (fallbackBtn) fallbackBtn.classList.remove("hidden");
       }
     }
     checkGisLoaded();

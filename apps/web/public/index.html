@@ -6,7 +6,7 @@
   <title>Gon ASO — Adaptive Skill Orchestrator</title>
   <!-- Pretendard Web Font -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-  <link rel="stylesheet" href="/style.css?v=20261106-5">
+  <link rel="stylesheet" href="/style.css?v=20261106-6">
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -35,7 +35,7 @@
         <!-- Google Sign-In Section -->
         <div class="google-auth-section">
           <div id="google-signin-btn-container" class="google-signin-btn-container"></div>
-          <button type="button" id="google-fallback-btn" class="google-fallback-btn" onclick="triggerGoogleAuthFlow()">
+          <button type="button" id="google-fallback-btn" class="google-fallback-btn hidden" onclick="triggerGoogleAuthFlow()">
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -50,7 +50,7 @@
           <span>또는 이메일로 계속하기</span>
         </div>
 
-        <!-- Email / Password Form (Login & Sign-Up to Supabase) -->
+        <!-- Email / Password Form -->
         <form id="auth-email-form" class="auth-email-form" onsubmit="handleEmailAuthSubmit(event)">
           <div class="auth-field-group hidden" id="auth-name-group">
             <label for="auth-name-input" class="auth-field-label">이름 또는 닉네임 (선택)</label>
@@ -74,17 +74,6 @@
           <span id="auth-switch-prompt">계정이 없으신가요?</span>
           <button type="button" class="auth-switch-link" id="auth-switch-btn" onclick="toggleAuthMode()">회원가입</button>
         </div>
-
-        <div class="auth-infra-status" id="auth-infra-status">
-          <div class="auth-infra-row">
-            <span class="auth-infra-label">Supabase DB 연동</span>
-            <span class="auth-infra-badge" id="auth-supabase-badge">연결 확인 중...</span>
-          </div>
-          <div class="auth-infra-row">
-            <span class="auth-infra-label">Google OAuth 2.0</span>
-            <span class="auth-infra-badge" id="auth-google-badge">연결 확인 중...</span>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -97,7 +86,7 @@
         </div>
         <div class="modal-body">
           <p class="panel-desc" style="margin-bottom: 12px; font-size: 0.84rem; line-height: 1.5; text-align: left;">
-            사용할 Google 이메일 주소를 입력하면 즉시 인증되어 계정이 없는 경우 Supabase에 자동 회원가입 후 로그인돼요.
+            사용할 Google 이메일 주소를 입력하면 즉시 인증되어 계정이 없는 경우 자동 회원가입 후 로그인돼요.
           </p>
           <form onsubmit="handleGoogleQuickConnect(event)" class="auth-email-form">
             <div class="auth-field-group">
@@ -787,7 +776,7 @@
     </div>
   </div>
 
-  <script type="module" src="/session-search.js?v=20261106-5"></script>
-  <script src="/app.js?v=20261106-5"></script>
+  <script type="module" src="/session-search.js?v=20261106-6"></script>
+  <script src="/app.js?v=20261106-6"></script>
 </body>
 </html>
