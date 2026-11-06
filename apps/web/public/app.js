@@ -939,7 +939,7 @@ const EFFORT_LABELS = {
   high: "High",
 };
 
-const LOGO_VERSION = "v=20261106-9";
+const LOGO_VERSION = "v=20261106-10";
 
 // usage.provider / connection provider -> AI display name + logo
 const AI_BRANDS = {
@@ -949,8 +949,8 @@ const AI_BRANDS = {
   antigravity: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
   agy: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
   gemini: { name: "Gemini", logo: `/logos/google.svg?${LOGO_VERSION}` },
-  openai: { name: "Codex", logo: `/logos/openai.svg?${LOGO_VERSION}` },
-  codex: { name: "Codex", logo: `/logos/openai.svg?${LOGO_VERSION}` },
+  openai: { name: "ChatGPT", logo: `/logos/openai.svg?${LOGO_VERSION}` },
+  codex: { name: "ChatGPT", logo: `/logos/openai.svg?${LOGO_VERSION}` },
 };
 
 function aiBrand(provider) {
