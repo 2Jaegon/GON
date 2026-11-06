@@ -5,7 +5,8 @@ import {
   TaskExecutionContext,
   TaskExecutionResult,
   ChatExecutionContext,
-  ChatExecutionResult
+  ChatExecutionResult,
+  ProviderCallError
 } from "./types.js";
 
 function claudeArgs(prompt: string, model?: string, effort?: Effort): string[] {
@@ -125,7 +126,7 @@ export class ClaudeProvider implements IProviderAdapter {
         }
       }
 
-      throw new Error(`Claude Code 실행 실패: ${err.message}`);
+      throw new ProviderCallError("Claude", err.message);
     }
   }
 

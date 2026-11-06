@@ -1,12 +1,33 @@
+import { CliRunner, defaultCliRunner } from "./cli-runner.js";
 import { IProviderAdapter } from "./types.js";
 import { MockProvider } from "./mock-provider.js";
 import { AgyProvider } from "./agy-provider.js";
 import { ClaudeProvider } from "./claude-provider.js";
+import { CodexProvider } from "./codex-provider.js";
 
 export class ProviderRegistry {
   private mockProvider = new MockProvider();
-  private agyProvider = new AgyProvider();
-  private claudeProvider = new ClaudeProvider();
+  private agyProvider: AgyProvider;
+  private claudeProvider: ClaudeProvider;
+  private codexProvider: CodexProvider;
+
+  constructor(run: CliRunner = defaultCliRunner) {
+    this.agyProvider = new AgyProvider(run);
+    this.claudeProvider = new ClaudeProvider(run);
+    this.codexProvider = new CodexProvider(run);
+  }
+
+  /** Picks the adapter for a saved connection's provider. */
+  public forConnection(provider: "anthropic" | "google" | "openai"): IProviderAdapter {
+    switch (provider) {
+      case "anthropic":
+        return this.claudeProvider;
+      case "google":
+        return this.agyProvider;
+      case "openai":
+        return this.codexProvider;
+    }
+  }
 
   public get(name: "mock" | "agy" | "claude"): IProviderAdapter {
     switch (name) {

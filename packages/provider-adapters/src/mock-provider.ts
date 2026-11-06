@@ -94,7 +94,7 @@ export class MockProvider implements IProviderAdapter {
 
   public async executeChat(context: ChatExecutionContext): Promise<ChatExecutionResult> {
     const { prompt, workspaceId, runId } = context;
-    const output = `안녕하세요! AI 비서 Gon입니다. 무엇을 도와드릴까요?`;
+    const output = `안녕하세요! 무엇을 도와드릴까요?`;
     return {
       output,
       usage: {

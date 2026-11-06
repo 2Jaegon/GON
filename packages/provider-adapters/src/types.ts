@@ -43,3 +43,11 @@ export interface IProviderAdapter {
   executeChat?(context: ChatExecutionContext): Promise<ChatExecutionResult>;
 }
 
+
+/** A CLI call failed or returned nothing. `message` is shown to the user as-is. */
+export class ProviderCallError extends Error {
+  constructor(public readonly provider: string, message: string) {
+    super(`${provider} 호출에 실패했어요: ${message}`);
+    this.name = "ProviderCallError";
+  }
+}
