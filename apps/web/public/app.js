@@ -3182,7 +3182,7 @@ function updateTurnStatus(runId, text, isWorking) {
   }
 }
 
-function renderSafeMarkdown(rawText) {
+function renderSafeMarkdown(rawText, context = {}) {
   if (!rawText) return "";
   const codeBlocks = [];
   const textWithPlaceholders = String(rawText).replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_match, lang, code) => {
@@ -3201,7 +3201,37 @@ function renderSafeMarkdown(rawText) {
     return `@@CODE_BLOCK_${idx}@@`;
   });
 
-  let html = escapeHtml(textWithPlaceholders);
+  // Extract and safely transform images: ![alt](url)
+  // Only permit .gon-images/<name> when workspaceId and runId context are available
+  const imagePlaceholders = [];
+  const textWithImages = textWithPlaceholders.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (fullMatch, alt, url) => {
+    const cleanUrl = url.trim().replace(/^\.\//, "");
+    if (!cleanUrl.startsWith(".gon-images/")) {
+      return fullMatch;
+    }
+
+    const fileName = cleanUrl.slice(".gon-images/".length);
+    if (!/^[\w.-]+\.(png|jpe?g|webp)$/i.test(fileName) || fileName.includes("..")) {
+      return fullMatch;
+    }
+
+    const ws = context.workspaceId || currentWorkspaceId || "";
+    const run = context.runId || "";
+
+    if (!ws || !run) {
+      return fullMatch;
+    }
+
+    const safeAlt = escapeHtml(alt);
+    const safeSrc = `/api/v1/workspaces/${encodeURIComponent(ws)}/runs/${encodeURIComponent(run)}/images/${encodeURIComponent(fileName)}`;
+    const imgHtml = `<div class="agent-image-card"><img src="${safeSrc}" alt="${safeAlt}" class="agent-generated-img" loading="lazy" /></div>`;
+
+    const idx = imagePlaceholders.length;
+    imagePlaceholders.push(imgHtml);
+    return `@@IMAGE_PLACEHOLDER_${idx}@@`;
+  });
+
+  let html = escapeHtml(textWithImages);
   // Inline code
   html = html.replace(/`([^`\n]+)`/g, '<code style="padding:2px 5px;border-radius:4px;background:rgb(var(--c-sunken));font-family:var(--font-mono, monospace);font-size:0.9em;">$1</code>');
   // Bold
@@ -3213,6 +3243,11 @@ function renderSafeMarkdown(rawText) {
   html = html.replace(/^[•\-*] (.+)$/gm, '<div style="margin-left:10px;">• $1</div>');
   // Line breaks
   html = html.replace(/\n/g, "<br>");
+
+  // Re-insert safe image tags
+  imagePlaceholders.forEach((imgHtml, idx) => {
+    html = html.replace(`@@IMAGE_PLACEHOLDER_${idx}@@`, imgHtml);
+  });
 
   codeBlocks.forEach((blockHtml, idx) => {
     html = html.replace(`@@CODE_BLOCK_${idx}@@`, blockHtml);
@@ -3235,7 +3270,7 @@ function setResponseText(runId, text) {
   const respEl = document.getElementById(`response-${runId}`);
   if (respEl) {
     respEl.dataset.waiting = "";
-    respEl.innerHTML = renderSafeMarkdown(text);
+    respEl.innerHTML = renderSafeMarkdown(text, { runId, workspaceId: currentWorkspaceId });
   }
 }
 

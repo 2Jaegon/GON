@@ -3233,3 +3233,20 @@ button {
   padding: 2px 8px;
 }
 
+
+.agent-image-card {
+  margin: 12px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-sunken));
+  max-width: 480px;
+}
+
+.agent-generated-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  object-fit: contain;
+}
