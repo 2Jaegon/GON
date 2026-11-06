@@ -8,7 +8,8 @@ import {
   runClaudeAgent,
   describeDenial,
   summarizeTool,
-  isResumeFailure
+  isResumeFailure,
+  buildAgentSystemPrompt
 } from "@aso/provider-adapters";
 import { redactSecrets } from "@aso/security";
 import { EventBus } from "./event-bus.js";
@@ -185,6 +186,9 @@ export class AgentService {
     };
 
     let result: AgentResult;
+    const appendSystemPrompt = buildAgentSystemPrompt({
+      image: { gonRoot: process.cwd() }
+    });
 
     try {
       try {
@@ -195,6 +199,7 @@ export class AgentService {
             model: run.runContext?.model ?? undefined,
             effort: run.runContext?.effort ?? undefined,
             resumeSessionId,
+            appendSystemPrompt,
             extraAllowed,
             maxWallMs
           },
@@ -213,6 +218,7 @@ export class AgentService {
               model: run.runContext?.model ?? undefined,
               effort: run.runContext?.effort ?? undefined,
               resumeSessionId: undefined,
+              appendSystemPrompt,
               extraAllowed,
               maxWallMs
             },

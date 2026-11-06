@@ -50,6 +50,7 @@ export interface AgentRunOptions {
   model?: string;
   effort?: Effort;
   resumeSessionId?: string;
+  appendSystemPrompt?: string;
   extraAllowed?: string[];
   idleTimeoutMs?: number;
   maxWallMs?: number;
@@ -57,6 +58,10 @@ export interface AgentRunOptions {
 
 export function buildAgentArgs(o: AgentRunOptions): string[] {
   const allowed = [...AGENT_SAFE_TOOLS, ...(o.extraAllowed ?? [])];
+  if (o.appendSystemPrompt && o.appendSystemPrompt.includes("gen-image.mjs")) {
+    allowed.push("Bash(node *gen-image.mjs:*)");
+  }
+
   const args = [
     "-p",
     "--output-format",
@@ -75,6 +80,9 @@ export function buildAgentArgs(o: AgentRunOptions): string[] {
   }
   if (o.effort) {
     args.push("--effort", o.effort);
+  }
+  if (o.appendSystemPrompt) {
+    args.push("--append-system-prompt", o.appendSystemPrompt);
   }
 
   args.push("--allowedTools", ...allowed);
