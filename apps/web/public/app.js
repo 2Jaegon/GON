@@ -935,7 +935,7 @@ function toggleChatExpand() {
 
 const EFFORT_LABELS = {
   low: "Low",
-  medium: "중간",
+  medium: "Mid",
   high: "High",
 };
 
@@ -1135,15 +1135,6 @@ function renderModelPicker() {
     btn.classList.toggle("hidden", !efforts.includes(btn.dataset.effort));
     btn.classList.toggle("active", !!modelSelection && btn.dataset.effort === modelSelection.effort);
   });
-
-  const composerEffortWrap = document.getElementById("composer-effort-wrapper");
-  const composerEffortSelect = document.getElementById("composer-effort-select");
-  if (composerEffortWrap) {
-    composerEffortWrap.classList.toggle("hidden", !conn || efforts.length === 0);
-  }
-  if (composerEffortSelect && modelSelection && modelSelection.effort) {
-    composerEffortSelect.value = modelSelection.effort;
-  }
 
   const list = document.getElementById("popover-model-list");
   if (!list) return;
