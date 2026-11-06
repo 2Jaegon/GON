@@ -13,6 +13,160 @@ let activeEventSource = null;
 let cachedSessions = [];
 
 // ==========================================================================
+// Authenticated API Fetch & Session Handling
+// ==========================================================================
+
+async function apiFetch(url, opts = {}) {
+  const merged = {
+    ...opts,
+    credentials: "include",
+    headers: {
+      ...(opts.headers || {}),
+    },
+  };
+  const res = await fetch(url, merged);
+  if (res.status === 401) {
+    showLoginView();
+    throw new Error("UNAUTHENTICATED");
+  }
+  return res;
+}
+
+function showLoginView() {
+  const loginView = document.getElementById("login-view");
+  const appLayout = document.getElementById("app-layout");
+  const floatingToggle = document.getElementById("floating-sidebar-toggle");
+
+  if (loginView) loginView.classList.remove("hidden");
+  if (appLayout) appLayout.classList.add("hidden");
+  if (floatingToggle) floatingToggle.classList.add("hidden");
+
+  initGoogleSignIn();
+}
+
+function hideLoginView() {
+  const loginView = document.getElementById("login-view");
+  const appLayout = document.getElementById("app-layout");
+  const floatingToggle = document.getElementById("floating-sidebar-toggle");
+
+  if (loginView) loginView.classList.add("hidden");
+  if (appLayout) appLayout.classList.remove("hidden");
+  if (floatingToggle) floatingToggle.classList.remove("hidden");
+}
+
+let isGisInitialized = false;
+
+async function initGoogleSignIn() {
+  const errEl = document.getElementById("login-error-message");
+  const warnEl = document.getElementById("login-config-warning");
+  const btnContainer = document.getElementById("google-signin-btn-container");
+
+  if (errEl) errEl.classList.add("hidden");
+  if (warnEl) warnEl.classList.add("hidden");
+
+  try {
+    const configRes = await fetch(`${API_URL}/auth/config`, { credentials: "include" });
+    if (!configRes.ok) {
+      if (errEl) {
+        errEl.textContent = "인증 설정을 불러올 수 없어요.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+
+    const { googleClientId } = await configRes.json();
+    if (!googleClientId || googleClientId.trim() === "") {
+      if (warnEl) warnEl.classList.remove("hidden");
+      if (btnContainer) btnContainer.innerHTML = "";
+      return;
+    }
+
+    function checkGisLoaded() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleSignInCallback,
+        });
+        isGisInitialized = true;
+        if (btnContainer) {
+          btnContainer.innerHTML = "";
+          window.google.accounts.id.renderButton(btnContainer, {
+            theme: "outline",
+            size: "large",
+            shape: "pill",
+            width: 280,
+            text: "signin_with",
+            locale: "ko",
+          });
+        }
+      } else {
+        setTimeout(checkGisLoaded, 100);
+      }
+    }
+    checkGisLoaded();
+  } catch (err) {
+    console.error("Failed to init Google sign-in:", err);
+    if (errEl) {
+      errEl.textContent = "서버 연결에 실패했어요.";
+      errEl.classList.remove("hidden");
+    }
+  }
+}
+
+async function handleGoogleSignInCallback(response) {
+  const errEl = document.getElementById("login-error-message");
+  if (errEl) errEl.classList.add("hidden");
+
+  try {
+    const res = await fetch(`${API_URL}/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ credential: response.credential }),
+    });
+
+    if (res.status === 403) {
+      if (errEl) {
+        errEl.textContent = "허용되지 않은 계정이에요";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+
+    if (!res.ok) {
+      if (errEl) {
+        errEl.textContent = "로그인에 실패했어요. 다시 시도해 주세요.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+
+    hideLoginView();
+    await init();
+  } catch (err) {
+    console.error("Google sign-in error:", err);
+    if (errEl) {
+      errEl.textContent = "로그인 처리 중 오류가 발생했어요.";
+      errEl.classList.remove("hidden");
+    }
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (err) {
+    console.error("Logout error:", err);
+  } finally {
+    closeProfileDropdown();
+    showLoginView();
+  }
+}
+
+// ==========================================================================
 // Sidebar Collapse / Expand State
 // ==========================================================================
 
@@ -315,7 +469,7 @@ function renderSidebarRuns(items) {
 async function loadSidebarRuns() {
   if (!currentWorkspaceId || !currentProjectId) return;
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
     if (res.ok) {
       const data = await res.json();
       const items = data.items || [];
@@ -441,7 +595,7 @@ async function deleteSession(sessionId, e) {
   if (!confirmed) return;
 
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/sessions/${sessionId}`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/sessions/${sessionId}`, {
       method: "DELETE"
     });
     if (res.ok) {
@@ -586,7 +740,7 @@ function initModelPicker() {
 async function loadModelCatalog() {
   if (!currentWorkspaceId) return;
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/models`);
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/models`);
     if (!res.ok) return;
     const data = await res.json();
     modelCatalog = Array.isArray(data.subscription) ? data.subscription : [];
@@ -1270,27 +1424,37 @@ async function init() {
   } catch {}
 
   try {
-    // 1. Fetch user profile
-    const meRes = await fetch(`${API_URL}/me`);
-    if (meRes.ok) {
-      const me = await meRes.json();
-      const displayName = (me.displayName && me.displayName !== "Default Developer") ? me.displayName : "이재곤";
-      const nameEl = document.getElementById("user-display-name");
-      const avatarEl = document.getElementById("user-avatar");
-      const greetingEl = document.getElementById("greeting-title");
-
-      if (nameEl) nameEl.textContent = `${displayName} - Pro`;
-      if (avatarEl) avatarEl.textContent = displayName.charAt(0);
-      if (greetingEl) greetingEl.textContent = `${displayName}님, 안녕하세요`;
-
-      const menuNameEl = document.getElementById("profile-menu-name");
-      const menuAvatarEl = document.getElementById("profile-menu-avatar");
-      if (menuNameEl) menuNameEl.textContent = displayName;
-      if (menuAvatarEl) menuAvatarEl.textContent = displayName.charAt(0);
+    // 1. Fetch user profile (Session Check)
+    const meRes = await fetch(`${API_URL}/me`, { credentials: "include" });
+    if (meRes.status === 401) {
+      showLoginView();
+      return;
     }
+    if (!meRes.ok) {
+      showLoginView();
+      return;
+    }
+    hideLoginView();
+
+    const me = await meRes.json();
+    const displayName = (me.displayName && me.displayName !== "Default Developer")
+      ? me.displayName
+      : (me.email ? me.email.split("@")[0] : "이재곤");
+    const nameEl = document.getElementById("user-display-name");
+    const avatarEl = document.getElementById("user-avatar");
+    const greetingEl = document.getElementById("greeting-title");
+
+    if (nameEl) nameEl.textContent = `${displayName} - Pro`;
+    if (avatarEl) avatarEl.textContent = displayName.charAt(0);
+    if (greetingEl) greetingEl.textContent = `${displayName}님, 안녕하세요`;
+
+    const menuNameEl = document.getElementById("profile-menu-name");
+    const menuAvatarEl = document.getElementById("profile-menu-avatar");
+    if (menuNameEl) menuNameEl.textContent = displayName;
+    if (menuAvatarEl) menuAvatarEl.textContent = displayName.charAt(0);
 
     // 2. Fetch workspaces
-    const wsRes = await fetch(`${API_URL}/workspaces`);
+    const wsRes = await apiFetch(`${API_URL}/workspaces`);
     if (wsRes.ok) {
       const data = await wsRes.json();
       if (data.items.length > 0) {
@@ -1331,12 +1495,12 @@ let currentAllowedWorkspacePaths = [];
 async function initWorkspaceFolderState() {
   if (!currentWorkspaceId) return;
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
     if (res.ok) {
       const data = await res.json();
       if (data.items && data.items.length > 0) {
         currentRunnerDevice = data.items[0];
-        const pathsRes = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
+        const pathsRes = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`);
         if (pathsRes.ok) {
           const pathData = await pathsRes.json();
           currentAllowedWorkspacePaths = (pathData.allowedPaths || []).map(normalizePath).filter(Boolean);
@@ -1399,7 +1563,7 @@ async function pickWorkspaceFolder() {
       return;
     }
 
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/pick-folder`, {
       method: "POST"
     });
     const data = await res.json().catch(() => ({}));
@@ -1488,7 +1652,7 @@ async function selectWorkspacePath(dirPath) {
 
   if (currentWorkspaceId && currentRunnerDevice) {
     try {
-      await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/active-path`, {
+      await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/active-path`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: clean })
@@ -1504,7 +1668,7 @@ async function removeWorkspacePath(dirPath) {
   if (!dirPath || !currentWorkspaceId || !currentRunnerDevice) return;
   const clean = normalizePath(dirPath);
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${currentRunnerDevice.id}/paths`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: clean })
@@ -1543,7 +1707,7 @@ async function deleteRunnerDevice(deviceId, deviceName) {
   if (!confirmed) return;
 
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${deviceId}`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners/${deviceId}`, {
       method: "DELETE"
     });
     if (res.ok) {
@@ -1572,7 +1736,7 @@ async function deleteRunnerDevice(deviceId, deviceName) {
 
 async function loadProjects() {
   if (!currentWorkspaceId) return;
-  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects`);
+  const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects`);
   if (res.ok) {
     const data = await res.json();
     if (data.items.length > 0) {
@@ -1894,7 +2058,7 @@ async function submitChatPrompt() {
   const requireApproval = document.getElementById("run-approval-check") ? document.getElementById("run-approval-check").checked : true;
 
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2005,7 +2169,7 @@ function connectRunSSE(runId) {
   }
 
   const sseUrl = `${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/events`;
-  activeEventSource = new EventSource(sseUrl);
+  activeEventSource = new EventSource(sseUrl, { withCredentials: true });
 
   const term = document.getElementById(`term-${runId}`);
   if (term) term.textContent = "";
@@ -2243,7 +2407,7 @@ function markTaskCompleted(runId, taskKey) {
 
 async function approvePlanInTurn(runId) {
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/plan/approve`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/plan/approve`, {
       method: "POST"
     });
     if (res.ok) {
@@ -2260,7 +2424,7 @@ async function approvePlanInTurn(runId) {
 
 async function loadDiffsInTurn(runId) {
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/artifacts`);
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${runId}/artifacts`);
     if (res.ok) {
       const data = await res.json();
       const sec = document.getElementById(`sec-diff-${runId}`);
@@ -2301,7 +2465,7 @@ async function viewSession(sessionId) {
   let session = cachedSessions.find((s) => s.id === sessionId);
   if (!session) {
     try {
-      const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
+      const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`);
       if (res.ok) {
         const data = await res.json();
         const sessions = groupRunsIntoSessions(data.items || []);
@@ -2418,7 +2582,7 @@ async function renderTurnInThread(thread, run) {
 
   // Restore details and response from events
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${run.id}/event-list`);
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runs/${run.id}/event-list`);
     if (res.ok) {
       const data = await res.json();
       const events = data.items || [];
@@ -2478,7 +2642,7 @@ async function detectSubscriptions() {
     btn.textContent = "감지 중…";
   }
   try {
-    const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/detect-subscriptions`, {
+    const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections/detect-subscriptions`, {
       method: "POST"
     });
     if (res.ok) {
@@ -2499,7 +2663,7 @@ async function detectSubscriptions() {
 
 async function loadConnections() {
   if (!currentWorkspaceId) return;
-  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections`);
+  const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/connections`);
   if (res.ok) {
     const data = await res.json();
     const grid = document.getElementById("connections-list");
@@ -2533,7 +2697,7 @@ async function loadConnections() {
 
 async function issuePairingCode() {
   if (!currentWorkspaceId) return;
-  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
+  const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runner-pairings`, {
     method: "POST"
   });
   if (res.ok) {
@@ -2553,7 +2717,7 @@ function copyPairingCommand() {
 
 async function loadRunners() {
   if (!currentWorkspaceId) return;
-  const res = await fetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
+  const res = await apiFetch(`${API_URL}/workspaces/${currentWorkspaceId}/runners`);
   if (res.ok) {
     const data = await res.json();
     if (data.items && data.items.length > 0) {
@@ -2615,7 +2779,7 @@ async function loadUsage() {
     : `${API_URL}/workspaces/${currentWorkspaceId}/projects/${currentProjectId}/runs`;
 
   try {
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
       const tbody = document.getElementById("usage-body");

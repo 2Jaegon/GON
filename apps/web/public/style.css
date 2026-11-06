@@ -2572,3 +2572,111 @@ button {
   font-weight: 600;
   color: rgb(var(--c-sub));
 }
+
+/* ==========================================================================
+   Login View & Authentication Screen
+   ========================================================================== */
+.login-view {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgb(var(--c-bg));
+  z-index: 9999;
+  padding: 20px;
+}
+
+.login-view.hidden {
+  display: none !important;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background-color: rgb(var(--c-surface));
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
+  padding: 36px 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.login-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgb(var(--c-ink));
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.login-subtitle {
+  font-size: 0.85rem;
+  color: rgb(var(--c-faint));
+  margin: 0;
+  font-weight: 500;
+}
+
+.login-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.login-desc {
+  font-size: 0.88rem;
+  color: rgb(var(--c-sub));
+  margin: 0 0 8px 0;
+}
+
+.google-signin-btn-container {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+  width: 100%;
+}
+
+.login-error-message {
+  font-size: 0.82rem;
+  color: rgb(var(--c-danger));
+  background-color: rgba(var(--c-danger), 0.08);
+  border: 1px solid rgba(var(--c-danger), 0.2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-config-warning {
+  font-size: 0.82rem;
+  color: rgb(var(--c-sub));
+  background-color: rgb(var(--c-sunken));
+  border: 1px dashed rgb(var(--c-line));
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-config-warning code {
+  font-family: monospace;
+  font-weight: 600;
+  color: rgb(var(--c-ink));
+}
