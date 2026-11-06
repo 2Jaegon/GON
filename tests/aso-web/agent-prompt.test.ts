@@ -111,11 +111,20 @@ describe("Agent System Prompt & Image Generation Instructions", () => {
     expect(capturedOpts!.appendSystemPrompt).toContain("gen-image.mjs");
   });
 
-  it("buildAgentSystemPrompt includes grilling guidelines when grilling is true", () => {
-    const prompt = buildAgentSystemPrompt({ grilling: true });
+  it("buildAgentSystemPrompt enforces concise deliverable-focused responses without conversational fluff", () => {
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain("unnecessary conversational fluff");
+    expect(prompt).toContain("minimize token waste");
+  });
+
+  it("buildAgentSystemPrompt includes grilling guidelines covering implementation, image creation, and delegation terms", () => {
+    const prompt = buildAgentSystemPrompt({ grilling: true, image: { gonRoot: "C:/gon" } });
     expect(prompt).toContain("[Grilling]");
     expect(prompt).toContain("AskUserQuestion");
     expect(prompt).toContain("추천");
+    expect(prompt).toContain("이미지/디자인");
+    expect(prompt).toContain("간단하게");
+    expect(prompt).toContain("clarify them with 3-4 concise questions");
   });
 
   it("buildAgentSystemPrompt excludes grilling guidelines when grilling is false", () => {
