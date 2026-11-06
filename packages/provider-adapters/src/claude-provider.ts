@@ -1,6 +1,6 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { CliRunner, defaultCliRunner } from "./cli-runner.js";
 import {
+  Effort,
   IProviderAdapter,
   TaskExecutionContext,
   TaskExecutionResult,
@@ -8,16 +8,24 @@ import {
   ChatExecutionResult
 } from "./types.js";
 
-const execAsync = promisify(exec);
+function claudeArgs(prompt: string, model?: string, effort?: Effort): string[] {
+  return [
+    "-p", prompt, "--output-format", "json",
+    ...(model ? ["--model", model] : []),
+    ...(effort ? ["--effort", effort] : [])
+  ];
+}
 
 export class ClaudeProvider implements IProviderAdapter {
   public readonly name = "claude-provider";
+
+  constructor(private readonly run: CliRunner = defaultCliRunner) {}
 
   /**
    * Executes conversational chat turn via Claude Code CLI (Anthropic subscription)
    */
   public async executeChat(context: ChatExecutionContext): Promise<ChatExecutionResult> {
-    const { prompt, workspaceId, runId, context: runCtx } = context;
+    const { prompt, workspaceId, runId, model, effort, cwd, context: runCtx } = context;
 
     let fullPrompt = prompt;
     const attachments = runCtx?.attachments as Array<{ name: string; text?: string }> | undefined;
@@ -31,13 +39,7 @@ export class ClaudeProvider implements IProviderAdapter {
     const startTime = Date.now();
 
     try {
-      // Escape prompt for Windows command line execution
-      const sanitized = fullPrompt.replace(/"/g, '\\"');
-      const { stdout } = await execAsync(`claude -p "${sanitized}" --output-format json < NUL`, {
-        timeout: 45000,
-        encoding: "utf8",
-        maxBuffer: 10 * 1024 * 1024
-      });
+      const { stdout } = await this.run("claude", claudeArgs(fullPrompt, model, effort), { cwd, timeoutMs: 45000 });
 
       const parsed = JSON.parse(stdout.trim());
       const durationMs = Date.now() - startTime;
@@ -52,7 +54,7 @@ export class ClaudeProvider implements IProviderAdapter {
             runId,
             taskId: "chat",
             provider: "anthropic",
-            model: "claude-3-7-sonnet",
+            model: model ?? null,
             connectionMode: "LOCAL_NATIVE_CLI",
             inputTokens: 0,
             outputTokens: 0,
@@ -78,7 +80,7 @@ export class ClaudeProvider implements IProviderAdapter {
           runId,
           taskId: "chat",
           provider: "anthropic",
-          model: "claude-3-7-sonnet",
+          model: model ?? null,
           connectionMode: "LOCAL_NATIVE_CLI",
           inputTokens,
           outputTokens,
@@ -103,7 +105,7 @@ export class ClaudeProvider implements IProviderAdapter {
                 runId,
                 taskId: "chat",
                 provider: "anthropic",
-                model: "claude-3-7-sonnet",
+                model: model ?? null,
                 connectionMode: "LOCAL_NATIVE_CLI",
                 inputTokens: 0,
                 outputTokens: 0,
@@ -129,7 +131,7 @@ export class ClaudeProvider implements IProviderAdapter {
    * Executes structured DAG plan task via Claude Code
    */
   public async execute(context: TaskExecutionContext): Promise<TaskExecutionResult> {
-    const { task, runId, workspaceId, onEvent } = context;
+    const { task, runId, workspaceId, model, effort, cwd, onEvent } = context;
 
     if (onEvent) {
       await onEvent("task:started", {
@@ -150,11 +152,7 @@ export class ClaudeProvider implements IProviderAdapter {
 
     try {
       const taskPrompt = `작업: ${task.title}\n요구역량: ${task.capabilityRequirements.join(", ")}\n코드 변경 요약을 2줄 이내로 제시해줘.`;
-      const sanitized = taskPrompt.replace(/"/g, '\\"');
-      const { stdout } = await execAsync(`claude -p "${sanitized}" --output-format json < NUL`, {
-        timeout: 30000,
-        encoding: "utf8"
-      });
+      const { stdout } = await this.run("claude", claudeArgs(taskPrompt, model, effort), { cwd, timeoutMs: 30000 });
       const parsed = JSON.parse(stdout.trim());
       if (parsed.result) {
         outputText = parsed.result;
@@ -193,7 +191,7 @@ export class ClaudeProvider implements IProviderAdapter {
       runId,
       taskId: task.id,
       provider: "anthropic",
-      model: "claude-3-7-sonnet",
+      model: model ?? null,
       connectionMode: "LOCAL_NATIVE_CLI" as const,
       inputTokens: 1200,
       outputTokens: 450,
