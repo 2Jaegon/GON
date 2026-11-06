@@ -1,5 +1,5 @@
 import Fastify, { FastifyInstance } from "fastify";
-import type { CliRunner } from "@aso/provider-adapters";
+import type { CliRunner, AgentRunner } from "@aso/provider-adapters";
 import { IDatabase, createDatabase } from "@aso/database";
 import { EventBus } from "./services/event-bus.js";
 import { OrchestratorService } from "./services/orchestrator-service.js";
@@ -27,6 +27,7 @@ export interface ApiServerOptions {
   db?: IDatabase;
   logger?: boolean;
   cliRunner?: CliRunner;
+  agentRunner?: AgentRunner;
   skillCatalogPath?: string;
   localFolderPicker?: () => Promise<LocalFolderPickResult>;
   auth?: {
@@ -47,7 +48,7 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
 
   const db = options.db || createDatabase();
   const eventBus = new EventBus();
-  const orchestrator = new OrchestratorService(db, eventBus, options.cliRunner);
+  const orchestrator = new OrchestratorService(db, eventBus, options.cliRunner, options.agentRunner);
   const runnerGateway = new RunnerGateway(db);
 
   const googleClientId = options.auth?.googleClientId || process.env.GOOGLE_CLIENT_ID || "";

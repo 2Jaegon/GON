@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { IDatabase } from "@aso/database";
-import { CreateRunDTOSchema, ConnectionModels } from "@aso/contracts";
+import { CreateRunDTOSchema, ConnectionModels, AgentApprovalDTOSchema } from "@aso/contracts";
 import { OrchestratorService } from "../services/orchestrator-service.js";
 import { EventBus } from "../services/event-bus.js";
 import { resolveActiveWorkspacePath } from "../services/workspace-path.js";
@@ -35,6 +35,8 @@ export async function runRoutes(
 
     // A chosen connection must offer the model/effort and the workspace needs an active folder.
     let cwd: string | null = null;
+    let executionMode = dto.executionMode || "auto";
+
     if (dto.connectionId) {
       const fail = (code: string, message: string) => reply.status(400).send({ error: { code, message } });
       const connection = (await db.providers.listForWorkspace(workspaceId)).find((c) => c.id === dto.connectionId);
@@ -51,6 +53,11 @@ export async function runRoutes(
       }
       cwd = await resolveActiveWorkspacePath(db, workspaceId);
       if (!cwd) return fail("NO_WORKSPACE_FOLDER", "작업 폴더를 먼저 골라 주세요");
+
+      const reqMode = dto.executionMode ?? "auto";
+      if (connection.provider === "anthropic" && cwd && (reqMode === "auto" || reqMode === "agent")) {
+        executionMode = "agent";
+      }
     }
 
     const run = await db.runs.create({
@@ -59,7 +66,7 @@ export async function runRoutes(
       createdBy: (req as any).user?.id || "00000000-0000-0000-0000-000000000001",
       rawRequest: dto.request,
       status: "queued",
-      executionMode: dto.executionMode || "auto",
+      executionMode,
       runtime: dto.runtime || "local",
       providerPreference: dto.providerPreference || "auto",
       budget: {
@@ -80,9 +87,11 @@ export async function runRoutes(
     });
 
     const responseBody = {
+      id: run.id,
       runId: run.id,
       sessionId,
       status: run.status,
+      executionMode: run.executionMode,
       links: {
         self: `/api/v1/workspaces/${workspaceId}/runs/${run.id}`,
         events: `/api/v1/workspaces/${workspaceId}/runs/${run.id}/events`
@@ -142,6 +151,59 @@ export async function runRoutes(
     } catch (err: any) {
       return reply.status(400).send({ error: { code: "PLAN_APPROVAL_FAILED", message: err.message } });
     }
+  });
+
+  // Agent approval
+  server.post("/api/v1/workspaces/:workspaceId/runs/:runId/agent/approval", async (req, reply) => {
+    const { workspaceId, runId } = req.params as { workspaceId: string; runId: string };
+    const parsed = AgentApprovalDTOSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: { code: "AGENT_APPROVAL_FAILED", message: "결정(allow 또는 deny)이 올바르지 않아요" }
+      });
+    }
+
+    const run = await db.runs.findById(runId);
+    if (!run || run.workspaceId !== workspaceId) {
+      return reply.status(404).send({ error: { code: "RUN_NOT_FOUND", message: "실행을 찾을 수 없어요" } });
+    }
+
+    if (run.status !== "awaiting_approval") {
+      return reply.status(400).send({
+        error: { code: "AGENT_APPROVAL_FAILED", message: "승인 대기 중인 요청이 없어요" }
+      });
+    }
+
+    try {
+      await orchestrator.agent.resolveApproval(run, parsed.data.decision);
+      return reply.status(200).send({ success: true });
+    } catch (err: any) {
+      return reply.status(400).send({
+        error: { code: "AGENT_APPROVAL_FAILED", message: err?.message || String(err) }
+      });
+    }
+  });
+
+  // Cancel running run
+  server.post("/api/v1/workspaces/:workspaceId/runs/:runId/cancel", async (req, reply) => {
+    const { workspaceId, runId } = req.params as { workspaceId: string; runId: string };
+    const run = await db.runs.findById(runId);
+    if (!run || run.workspaceId !== workspaceId) {
+      return reply.status(404).send({ error: { code: "RUN_NOT_RUNNING", message: "진행 중인 실행을 찾을 수 없어요" } });
+    }
+
+    if (run.status === "awaiting_approval") {
+      await db.runs.updateStatus(run.id, "cancelled", { cancelledAt: new Date().toISOString() });
+      await orchestrator.emitEvent(workspaceId, run.id, "run:cancelled", {});
+      return reply.status(200).send({ success: true });
+    }
+
+    const cancelled = orchestrator.agent.cancel(runId);
+    if (!cancelled) {
+      return reply.status(404).send({ error: { code: "RUN_NOT_RUNNING", message: "진행 중인 실행이 아니에요" } });
+    }
+
+    return reply.status(200).send({ success: true });
   });
 
   // Get tasks
