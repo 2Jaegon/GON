@@ -3,7 +3,8 @@ import WebSocket from "ws";
 import { FastifyInstance } from "fastify";
 import type { IDatabase } from "@aso/database";
 import { signChallenge } from "@aso/execution-protocol";
-import { createApiServer, DEV_WORKSPACE_ID } from "../../apps/api/src/server.js";
+import { DEV_WORKSPACE_ID } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { pickFolder } from "../../apps/local-runner/src/folder-picker.js";
 
 describe("pickFolder helper", () => {
@@ -85,7 +86,7 @@ describe("PICK_FOLDER end-to-end route and gateway", () => {
   }
 
   beforeAll(async () => {
-    const app = await createApiServer({ logger: false });
+    const app = await createAuthedServer({ logger: false });
     server = app.server;
     db = app.db;
     runnerGateway = app.runnerGateway;

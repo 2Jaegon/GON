@@ -53,7 +53,7 @@ export async function runRoutes(
     const run = await db.runs.create({
       workspaceId,
       projectId,
-      createdBy: "00000000-0000-0000-0000-000000000001",
+      createdBy: (req as any).user?.id || "00000000-0000-0000-0000-000000000001",
       rawRequest: dto.request,
       status: "queued",
       executionMode: dto.executionMode || "auto",

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { CliRunner } from "@aso/provider-adapters";
 import { createDatabase, IDatabase } from "@aso/database";
-import { createApiServer } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { resolveActiveWorkspacePath } from "../../apps/api/src/services/workspace-path.js";
 
 const WS = "00000000-0000-7000-8000-000000000002";
@@ -32,7 +32,7 @@ function recordingRunner(calls: Call[], failPrompt = false): CliRunner {
 
 async function setup(calls: Call[] = [], failPrompt = false) {
   const db = createDatabase(":memory:");
-  const { server } = await createApiServer({ db, logger: false, cliRunner: recordingRunner(calls, failPrompt) });
+  const { server } = await createAuthedServer({ db, logger: false, cliRunner: recordingRunner(calls, failPrompt) });
   const detect = await server.inject({ method: "POST", url: `/api/v1/workspaces/${WS}/connections/detect-subscriptions` });
   const claude = JSON.parse(detect.body).items.find((c: any) => c.provider === "anthropic");
   return { db, server, connectionId: claude.id as string };

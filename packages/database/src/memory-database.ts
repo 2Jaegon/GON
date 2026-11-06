@@ -36,7 +36,8 @@ import {
   IApprovalRepository,
   IArtifactRepository,
   IUsageRepository,
-  IIdempotencyRepository
+  IIdempotencyRepository,
+  ISessionRepository
 } from "./types.js";
 
 export class MemoryDatabase implements IDatabase {
@@ -57,6 +58,7 @@ export class MemoryDatabase implements IDatabase {
   private artifactsMap = new Map<string, ArtifactRecord[]>(); // runId -> artifacts
   private usageMap = new Map<string, UsageRecord[]>(); // runId -> usages
   private idempotencyMap = new Map<string, { status: number; body: any; expiresAt: number }>();
+  private sessionsMap = new Map<string, { userId: string; expiresAt: string }>();
 
   constructor(filePath?: string) {
     if (filePath && filePath !== ":memory:") {
@@ -128,11 +130,18 @@ export class MemoryDatabase implements IDatabase {
       }
       return null;
     },
+    findByGoogleSub: async (sub: string) => {
+      for (const u of this.usersMap.values()) {
+        if (u.googleSub === sub) return u;
+      }
+      return null;
+    },
     create: async (data: any) => {
       const user: User = {
         id: data.id || crypto.randomUUID(),
         email: data.email,
         displayName: data.displayName || null,
+        googleSub: data.googleSub,
         createdAt: new Date().toISOString()
       };
       this.usersMap.set(user.id, user);
@@ -707,6 +716,18 @@ export class MemoryDatabase implements IDatabase {
         body,
         expiresAt: Date.now() + ttlSeconds * 1000
       });
+    }
+  };
+
+  public sessions: ISessionRepository = {
+    create: async (userId: string, tokenHash: string, expiresAt: string) => {
+      this.sessionsMap.set(tokenHash, { userId, expiresAt });
+    },
+    findByTokenHash: async (h: string) => {
+      return this.sessionsMap.get(h) || null;
+    },
+    delete: async (h: string) => {
+      this.sessionsMap.delete(h);
     }
   };
 }

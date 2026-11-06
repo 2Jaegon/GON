@@ -7,7 +7,7 @@ import {
   parseAgyModels,
   parseClaudeAuthStatus
 } from "@aso/provider-adapters";
-import { createApiServer } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { createDatabase } from "@aso/database";
 
 const AGY =
@@ -98,7 +98,7 @@ describe("GET /models", () => {
       "codex --version": "codex-cli 1.0.0"
     });
     const db = createDatabase(":memory:");
-    const { server } = await createApiServer({ db, logger: false, cliRunner });
+    const { server } = await createAuthedServer({ db, logger: false, cliRunner });
     const ws = "00000000-0000-7000-8000-000000000002";
 
     const detect = await server.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/connections/detect-subscriptions` });

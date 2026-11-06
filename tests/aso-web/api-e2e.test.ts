@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createApiServer } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { FastifyInstance } from "fastify";
 
 describe("ASO Web API End-to-End Integration", () => {
@@ -8,7 +8,7 @@ describe("ASO Web API End-to-End Integration", () => {
   let projectId: string;
 
   beforeAll(async () => {
-    const app = await createApiServer({ logger: false });
+    const app = await createAuthedServer({ logger: false });
     server = app.server;
     await server.ready();
 
@@ -43,7 +43,7 @@ describe("ASO Web API End-to-End Integration", () => {
     const res = await server.inject({ method: "GET", url: "/api/v1/me" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.email).toBe("developer@aso.local");
+    expect(body.email).toBe("owner@test.local");
     expect(body.role).toBe("owner");
   });
 

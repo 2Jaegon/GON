@@ -3,7 +3,8 @@ import WebSocket from "ws";
 import { FastifyInstance } from "fastify";
 import type { IDatabase } from "@aso/database";
 import { signChallenge, verifyChallenge } from "@aso/execution-protocol";
-import { createApiServer, DEV_WORKSPACE_ID } from "../../apps/api/src/server.js";
+import { DEV_WORKSPACE_ID } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 
 describe("verifyChallenge", () => {
   const secret = "a".repeat(64);
@@ -79,7 +80,7 @@ describe("runner HMAC authentication", () => {
   }
 
   beforeAll(async () => {
-    const app = await createApiServer({ logger: false });
+    const app = await createAuthedServer({ logger: false });
     server = app.server;
     db = app.db;
     await server.listen({ port: 0, host: "127.0.0.1" });

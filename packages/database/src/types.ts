@@ -23,7 +23,14 @@ import {
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  findByGoogleSub(sub: string): Promise<User | null>;
   create(user: Omit<User, "id" | "createdAt">): Promise<User>;
+}
+
+export interface ISessionRepository {
+  create(userId: string, tokenHash: string, expiresAt: string): Promise<void>;
+  findByTokenHash(h: string): Promise<{ userId: string; expiresAt: string } | null>;
+  delete(h: string): Promise<void>;
 }
 
 export interface IWorkspaceRepository {
@@ -142,5 +149,6 @@ export interface IDatabase {
   artifacts: IArtifactRepository;
   usage: IUsageRepository;
   idempotency: IIdempotencyRepository;
+  sessions: ISessionRepository;
 }
 

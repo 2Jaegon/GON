@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createApiServer } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { createDatabase } from "@aso/database";
 
 describe("Desktop Runner Workspace Directory Selection", () => {
   it("allows querying, granting, and switching desktop workspace paths", async () => {
     const db = createDatabase(":memory:");
-    const { server } = await createApiServer({ db, logger: false });
+    const { server } = await createAuthedServer({ db, logger: false });
 
     // 1. Create a pairing and redeem to register a device
     const pairRes = await server.inject({

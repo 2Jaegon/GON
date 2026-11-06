@@ -10,6 +10,7 @@ export const UserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   displayName: z.string().nullable().optional(),
+  googleSub: z.string().optional(),
   createdAt: z.string().datetime(),
   disabledAt: z.string().datetime().nullable().optional()
 });

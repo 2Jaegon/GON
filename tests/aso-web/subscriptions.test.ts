@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { SubscriptionDetector, ProviderRegistry, CliRunner } from "@aso/provider-adapters";
-import { createApiServer } from "../../apps/api/src/server.js";
+import { createAuthedServer } from "./helpers/auth.js";
 import { createDatabase } from "@aso/database";
 
 const cliRunner: CliRunner = async (cmd, args) => {
@@ -45,7 +45,7 @@ describe("Subscription Connection & Provider Routing", () => {
 
   it("API automatically populates and returns local user subscriptions on /connections", async () => {
     const db = createDatabase(":memory:");
-    const { server } = await createApiServer({ db, logger: false, cliRunner });
+    const { server } = await createAuthedServer({ db, logger: false, cliRunner });
 
     const res = await server.inject({
       method: "GET",
@@ -63,7 +63,7 @@ describe("Subscription Connection & Provider Routing", () => {
 
   it("POST /connections/api-key returns 501 and does not create any USER_API_KEY connection", async () => {
     const db = createDatabase(":memory:");
-    const { server } = await createApiServer({ db, logger: false, cliRunner });
+    const { server } = await createAuthedServer({ db, logger: false, cliRunner });
     const wsId = "00000000-0000-7000-8000-000000000002";
 
     const res = await server.inject({
