@@ -50,3 +50,4 @@ describe("Skills Catalog API (GET /api/v1/skills)", () => {
     expect(data).toEqual({ items: [] });
   });
 });
+

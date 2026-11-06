@@ -51,3 +51,4 @@ export const skillsRoutes: FastifyPluginAsync<SkillsRouteOptions> = async (serve
     }
   });
 };
+

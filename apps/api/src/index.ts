@@ -1,4 +1,16 @@
+import fs from "node:fs";
+import path from "node:path";
 import { createApiServer } from "./server.js";
+
+// Load .env file if present
+try {
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === "function") {
+    (process as any).loadEnvFile(envPath);
+  }
+} catch {
+  // ignore
+}
 
 const PORT = parseInt(process.env.PORT || "4000", 10);
 const HOST = process.env.HOST || "127.0.0.1";
