@@ -7,3 +7,4 @@ export * from "./codex-provider.js";
 export * from "./model-discovery.js";
 export * from "./subscription-detector.js";
 export * from "./provider-registry.js";
+export * from "./claude-agent.js";
