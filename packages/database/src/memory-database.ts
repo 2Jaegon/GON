@@ -139,12 +139,15 @@ export class MemoryDatabase implements IDatabase {
       return null;
     },
     create: async (data: any) => {
-      const user: User = {
+      const user: User & Record<string, any> = {
         id: data.id || crypto.randomUUID(),
         email: data.email,
         displayName: data.displayName || null,
         googleSub: data.googleSub,
-        createdAt: new Date().toISOString()
+        ...(data.passwordHash ? { passwordHash: data.passwordHash } : {}),
+        ...(data.provider ? { provider: data.provider } : {}),
+        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+        createdAt: data.createdAt || new Date().toISOString()
       };
       this.usersMap.set(user.id, user);
       this.saveToDisk();

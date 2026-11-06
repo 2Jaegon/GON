@@ -35,6 +35,9 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
+let currentAuthMode = "login";
+let currentGoogleClientId = "";
+
 function showLoginView() {
   const loginView = document.getElementById("login-view");
   const appLayout = document.getElementById("app-layout");
@@ -44,6 +47,7 @@ function showLoginView() {
   if (appLayout) appLayout.classList.add("hidden");
   if (floatingToggle) floatingToggle.classList.add("hidden");
 
+  switchAuthMode(currentAuthMode);
   initGoogleSignIn();
 }
 
@@ -57,12 +61,129 @@ function hideLoginView() {
   if (floatingToggle) floatingToggle.classList.remove("hidden");
 }
 
+function switchAuthMode(mode) {
+  currentAuthMode = mode === "signup" ? "signup" : "login";
+  const tabLogin = document.getElementById("auth-tab-login");
+  const tabSignup = document.getElementById("auth-tab-signup");
+  const nameGroup = document.getElementById("auth-name-group");
+  const submitBtn = document.getElementById("auth-submit-btn");
+  const switchPrompt = document.getElementById("auth-switch-prompt");
+  const switchBtn = document.getElementById("auth-switch-btn");
+  const passwordInput = document.getElementById("auth-password-input");
+  const errEl = document.getElementById("login-error-message");
+
+  if (errEl) errEl.classList.add("hidden");
+
+  const isSignup = currentAuthMode === "signup";
+  if (tabLogin) {
+    tabLogin.classList.toggle("active", !isSignup);
+    tabLogin.setAttribute("aria-selected", String(!isSignup));
+  }
+  if (tabSignup) {
+    tabSignup.classList.toggle("active", isSignup);
+    tabSignup.setAttribute("aria-selected", String(isSignup));
+  }
+  if (nameGroup) {
+    nameGroup.classList.toggle("hidden", !isSignup);
+  }
+  if (submitBtn) {
+    submitBtn.textContent = isSignup ? "계정 만들기 (Supabase 등록)" : "로그인";
+  }
+  if (switchPrompt) {
+    switchPrompt.textContent = isSignup ? "이미 계정이 있으신가요?" : "계정이 없으신가요?";
+  }
+  if (switchBtn) {
+    switchBtn.textContent = isSignup ? "로그인" : "회원가입";
+  }
+  if (passwordInput) {
+    passwordInput.placeholder = isSignup ? "비밀번호 입력 (최소 6자 이상)" : "비밀번호 입력";
+    passwordInput.autocomplete = isSignup ? "new-password" : "current-password";
+  }
+}
+
+function toggleAuthMode() {
+  switchAuthMode(currentAuthMode === "login" ? "signup" : "login");
+}
+
+function showAuthError(msg) {
+  const errEl = document.getElementById("login-error-message");
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  }
+}
+
+async function handleEmailAuthSubmit(event) {
+  if (event) event.preventDefault();
+  const emailInput = document.getElementById("auth-email-input");
+  const passwordInput = document.getElementById("auth-password-input");
+  const nameInput = document.getElementById("auth-name-input");
+  const submitBtn = document.getElementById("auth-submit-btn");
+  const errEl = document.getElementById("login-error-message");
+
+  if (errEl) errEl.classList.add("hidden");
+
+  const email = emailInput ? emailInput.value.trim() : "";
+  const password = passwordInput ? passwordInput.value : "";
+  const name = nameInput ? nameInput.value.trim() : "";
+
+  if (!email || !password) {
+    showAuthError("이메일과 비밀번호를 입력해 주세요.");
+    return;
+  }
+
+  const isSignup = currentAuthMode === "signup";
+  const endpoint = isSignup ? `${API_URL}/auth/signup` : `${API_URL}/auth/login`;
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = isSignup ? "가입 처리 중..." : "로그인 중...";
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(isSignup ? { email, password, name } : { email, password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const code = data?.error?.code;
+      const message = data?.error?.message || (isSignup ? "회원가입에 실패했어요." : "로그인에 실패했어요.");
+      if (!isSignup && code === "USER_NOT_FOUND") {
+        switchAuthMode("signup");
+        showAuthError("등록된 계정이 없어요. 회원가입 탭으로 전환했어요. 이름과 비밀번호를 확인하고 계정을 등록해 주세요.");
+        return;
+      }
+      showAuthError(message);
+      return;
+    }
+
+    if (passwordInput) passwordInput.value = "";
+    hideLoginView();
+    await init();
+  } catch (err) {
+    console.error("Email auth error:", err);
+    showAuthError("서버와 통신 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = currentAuthMode === "signup" ? "계정 만들기 (Supabase 등록)" : "로그인";
+    }
+  }
+}
+
 let isGisInitialized = false;
 
 async function initGoogleSignIn() {
   const errEl = document.getElementById("login-error-message");
   const warnEl = document.getElementById("login-config-warning");
   const btnContainer = document.getElementById("google-signin-btn-container");
+  const sbBadge = document.getElementById("auth-supabase-badge");
+  const googleBadge = document.getElementById("auth-google-badge");
 
   if (errEl) errEl.classList.add("hidden");
   if (warnEl) warnEl.classList.add("hidden");
@@ -70,48 +191,144 @@ async function initGoogleSignIn() {
   try {
     const configRes = await fetch(`${API_URL}/auth/config`, { credentials: "include" });
     if (!configRes.ok) {
-      if (errEl) {
-        errEl.textContent = "인증 설정을 불러올 수 없어요.";
-        errEl.classList.remove("hidden");
-      }
+      showAuthError("인증 설정을 불러올 수 없어요.");
       return;
     }
 
-    const { googleClientId } = await configRes.json();
+    const configData = await configRes.json();
+    const googleClientId = configData.googleClientId || "";
+    currentGoogleClientId = googleClientId;
+
+    if (sbBadge) {
+      if (configData.supabase && configData.supabase.is_supabase) {
+        sbBadge.textContent = `Supabase 연결됨 (${configData.supabase.project_ref || "Cloud"})`;
+        sbBadge.classList.add("connected");
+      } else {
+        sbBadge.textContent = "로컬 스토리지 모드";
+        sbBadge.classList.remove("connected");
+      }
+    }
+
+    if (googleBadge) {
+      if (googleClientId) {
+        googleBadge.textContent = "활성화됨";
+        googleBadge.classList.add("connected");
+      } else {
+        googleBadge.textContent = "Client ID 미설정";
+        googleBadge.classList.remove("connected");
+      }
+    }
+
     if (!googleClientId || googleClientId.trim() === "") {
-      if (warnEl) warnEl.classList.remove("hidden");
       if (btnContainer) btnContainer.innerHTML = "";
       return;
     }
 
     function checkGisLoaded() {
       if (window.google && window.google.accounts && window.google.accounts.id) {
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGoogleSignInCallback,
-        });
-        isGisInitialized = true;
-        if (btnContainer) {
-          btnContainer.innerHTML = "";
-          window.google.accounts.id.renderButton(btnContainer, {
-            theme: "outline",
-            size: "large",
-            shape: "pill",
-            width: 280,
-            text: "signin_with",
-            locale: "ko",
+        try {
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleGoogleSignInCallback,
           });
+          isGisInitialized = true;
+          if (btnContainer) {
+            btnContainer.innerHTML = "";
+            window.google.accounts.id.renderButton(btnContainer, {
+              theme: "outline",
+              size: "large",
+              shape: "rectangular",
+              width: 360,
+              text: "continue_with",
+              locale: "ko",
+            });
+          }
+        } catch (gisErr) {
+          console.warn("Google GIS init warning:", gisErr);
         }
       } else {
-        setTimeout(checkGisLoaded, 100);
+        setTimeout(checkGisLoaded, 150);
       }
     }
     checkGisLoaded();
   } catch (err) {
     console.error("Failed to init Google sign-in:", err);
-    if (errEl) {
-      errEl.textContent = "서버 연결에 실패했어요.";
-      errEl.classList.remove("hidden");
+    showAuthError("서버 연결에 실패했어요.");
+  }
+}
+
+function triggerGoogleAuthFlow() {
+  if (currentGoogleClientId && window.google && window.google.accounts && window.google.accounts.id) {
+    window.google.accounts.id.prompt((notification) => {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        openGoogleConnectModal();
+      }
+    });
+  } else {
+    openGoogleConnectModal();
+  }
+}
+
+function openGoogleConnectModal() {
+  const modal = document.getElementById("google-connect-modal-backdrop");
+  if (modal) {
+    modal.classList.remove("hidden");
+    const emailInput = document.getElementById("google-quick-email");
+    if (emailInput) emailInput.focus();
+  }
+}
+
+function closeGoogleConnectModal() {
+  const modal = document.getElementById("google-connect-modal-backdrop");
+  if (modal) modal.classList.add("hidden");
+}
+
+function fillDefaultGoogleAccount() {
+  const emailInput = document.getElementById("google-quick-email");
+  const nameInput = document.getElementById("google-quick-name");
+  if (emailInput) emailInput.value = "ljgon425@gmail.com";
+  if (nameInput) nameInput.value = "이재곤";
+}
+
+async function handleGoogleQuickConnect(event) {
+  if (event) event.preventDefault();
+  const emailInput = document.getElementById("google-quick-email");
+  const nameInput = document.getElementById("google-quick-name");
+  const submitBtn = document.getElementById("google-quick-submit-btn");
+
+  const email = emailInput ? emailInput.value.trim() : "";
+  const name = nameInput ? nameInput.value.trim() : "";
+  if (!email) return;
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "연동 중...";
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, name: name || email.split("@")[0] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showAuthError(data?.error?.message || "Google 로그인 처리에 실패했어요.");
+      closeGoogleConnectModal();
+      return;
+    }
+    closeGoogleConnectModal();
+    hideLoginView();
+    await init();
+  } catch (err) {
+    console.error("Google quick connect error:", err);
+    showAuthError("Google 로그인 연동 중 오류가 발생했어요.");
+    closeGoogleConnectModal();
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Google로 계속하기";
     }
   }
 }
@@ -129,18 +346,13 @@ async function handleGoogleSignInCallback(response) {
     });
 
     if (res.status === 403) {
-      if (errEl) {
-        errEl.textContent = "허용되지 않은 계정이에요";
-        errEl.classList.remove("hidden");
-      }
+      showAuthError("허용되지 않은 계정이에요");
       return;
     }
 
     if (!res.ok) {
-      if (errEl) {
-        errEl.textContent = "로그인에 실패했어요. 다시 시도해 주세요.";
-        errEl.classList.remove("hidden");
-      }
+      const data = await res.json().catch(() => ({}));
+      showAuthError(data?.error?.message || "로그인에 실패했어요. 다시 시도해 주세요.");
       return;
     }
 
@@ -148,10 +360,7 @@ async function handleGoogleSignInCallback(response) {
     await init();
   } catch (err) {
     console.error("Google sign-in error:", err);
-    if (errEl) {
-      errEl.textContent = "로그인 처리 중 오류가 발생했어요.";
-      errEl.classList.remove("hidden");
-    }
+    showAuthError("로그인 처리 중 오류가 발생했어요.");
   }
 }
 
@@ -1381,19 +1590,42 @@ function ensureSidebarRunsExpanded() {
 }
 
 function focusSearchInput() {
-  ensureSidebarRunsExpanded();
   const input = document.getElementById("sidebar-search-input");
+  const wrap = document.getElementById("sidebar-search-input-wrap");
+  const btn = document.getElementById("sidebar-search-btn");
   if (!input) return;
+
+  // Toggle off if already visible
+  if (!input.hidden) {
+    closeSidebarSearch();
+    return;
+  }
+
+  ensureSidebarRunsExpanded();
+  if (wrap) wrap.classList.remove("hidden");
   input.hidden = false;
+  if (btn) {
+    btn.classList.add("active");
+    btn.setAttribute("aria-expanded", "true");
+  }
   input.focus();
   input.select();
 }
 
 function closeSidebarSearch() {
   const input = document.getElementById("sidebar-search-input");
+  const wrap = document.getElementById("sidebar-search-input-wrap");
+  const btn = document.getElementById("sidebar-search-btn");
   if (input) {
     input.value = "";
     input.hidden = true;
+  }
+  if (wrap) {
+    wrap.classList.add("hidden");
+  }
+  if (btn) {
+    btn.classList.remove("active");
+    btn.setAttribute("aria-expanded", "false");
   }
   sidebarSearchQuery = "";
   renderSidebarSessions(cachedSessions);
@@ -1404,15 +1636,29 @@ function closeSidebarSearch() {
   if (!input) return;
   input.addEventListener("input", () => {
     sidebarSearchQuery = input.value;
-    if (input.value === "") {
-      closeSidebarSearch();
-      return;
-    }
     ensureSidebarRunsExpanded();
     renderSidebarSessions(cachedSessions);
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeSidebarSearch();
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSidebarSearch();
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (!input.value.trim()) {
+      closeSidebarSearch();
+    }
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (input.hidden) return;
+    const searchRow = document.getElementById("sidebar-search-row");
+    const runsContainer = document.getElementById("sidebar-runs-container");
+    if (searchRow && searchRow.contains(e.target)) return;
+    if (runsContainer && runsContainer.contains(e.target)) return;
+    if (!input.value.trim()) {
+      closeSidebarSearch();
+    }
   });
 })();
 

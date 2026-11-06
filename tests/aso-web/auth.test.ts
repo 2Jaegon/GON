@@ -241,5 +241,48 @@ describe("Google Sign-In, Session & Protected Routes", () => {
     expect(res.headers["access-control-allow-origin"]).not.toBe("*");
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
   });
+
+  it("supports email/password signup and login with session cookie", async () => {
+    const db = createDatabase(":memory:");
+    const { server } = await createApiServer({ db, logger: false });
+
+    // 1. Login before signup -> 401 USER_NOT_FOUND
+    const missingLogin = await server.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: "newuser@example.com", password: "password123" }
+    });
+    expect(missingLogin.statusCode).toBe(401);
+    expect(JSON.parse(missingLogin.body).error?.code).toBe("USER_NOT_FOUND");
+
+    // 2. Signup -> 201 + Set-Cookie
+    const signupRes = await server.inject({
+      method: "POST",
+      url: "/api/v1/auth/signup",
+      payload: { email: "newuser@example.com", password: "password123", name: "신규 사용자" }
+    });
+    expect(signupRes.statusCode).toBe(201);
+    const signupBody = JSON.parse(signupRes.body);
+    expect(signupBody.user.email).toBe("newuser@example.com");
+    expect(signupBody.user.displayName).toBe("신규 사용자");
+    expect(signupRes.headers["set-cookie"]).toContain("aso_session=");
+
+    // 3. Duplicate signup -> 409 EMAIL_ALREADY_EXISTS
+    const dupRes = await server.inject({
+      method: "POST",
+      url: "/api/v1/auth/signup",
+      payload: { email: "newuser@example.com", password: "password123" }
+    });
+    expect(dupRes.statusCode).toBe(409);
+
+    // 4. Login with correct password -> 200 + Set-Cookie
+    const loginRes = await server.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: "newuser@example.com", password: "password123" }
+    });
+    expect(loginRes.statusCode).toBe(200);
+    expect(loginRes.headers["set-cookie"]).toContain("aso_session=");
+  });
 });
 
