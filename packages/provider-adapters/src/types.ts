@@ -1,6 +1,6 @@
-import { RunTask, UsageRecord } from "@aso/contracts";
+import { Effort, RunTask, UsageRecord } from "@aso/contracts";
 
-export type Effort = "low" | "medium" | "high";
+export type { Effort };
 
 export interface TaskExecutionContext {
   runId: string;

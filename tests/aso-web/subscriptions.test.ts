@@ -30,6 +30,24 @@ describe("Subscription Connection & Provider Routing", () => {
     expect(agy?.connectionView.mode).toBe("LOCAL_NATIVE_CLI");
   });
 
+  it("shows the ChatGPT plan from the codex login and never claims a Gemini plan", async () => {
+    const runner: CliRunner = async (cmd, args) => {
+      const key = [cmd, ...args].join(" ");
+      if (args[0] === "--version") return { stdout: "1.0.0", stderr: "" };
+      if (key === "codex login status") return { stdout: "Logged in using ChatGPT", stderr: "" };
+      if (key === "agy models") return { stdout: "gemini-x-low\tX (Low)\ngemini-x-high\tX (High)\n", stderr: "" };
+      throw new Error(`unexpected cli call: ${key}`);
+    };
+    const subs = await new SubscriptionDetector(runner, undefined, () => "free").scanSubscriptions("w");
+    const codex = subs.find((s) => s.provider === "openai")!.connectionView;
+    const agy = subs.find((s) => s.provider === "google")!.connectionView;
+
+    expect((codex.metadata as any).models).toMatchObject({ plan: "free", planVerified: true });
+    expect(codex.details).toBe("ChatGPT 계정 연결됨 · FREE 플랜");
+    expect((agy.metadata as any).models).toMatchObject({ plan: null, efforts: ["low", "high"] });
+    expect(agy.details).not.toContain("구독");
+  });
+
   it("ProviderRegistry resolves providers by preference", () => {
     const registry = new ProviderRegistry();
 

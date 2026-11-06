@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { ProviderConnectionView } from "@aso/contracts";
 import { CliRunner, defaultCliRunner, resolveCliCommand } from "./cli-runner.js";
-import { ModelCatalog, discoverModels, loadModelCatalog, parseClaudeAuthStatus } from "./model-discovery.js";
+import { ModelCatalog, discoverModels, loadModelCatalog, parseClaudeAuthStatus, readCodexPlan } from "./model-discovery.js";
 
 export interface DetectedSubscription {
   provider: "anthropic" | "google" | "openai";
@@ -19,12 +19,16 @@ export interface DetectedSubscription {
 
 export class SubscriptionDetector {
   private catalog: ModelCatalog;
+  private codexPlan: () => string | null;
 
   constructor(
     private run: CliRunner = defaultCliRunner,
-    catalog?: ModelCatalog
+    catalog?: ModelCatalog,
+    codexPlan?: () => string | null
   ) {
     this.catalog = catalog ?? loadModelCatalog();
+    // Only the real CLI runner reads the real ~/.codex/auth.json, so tests with a fake runner stay hermetic.
+    this.codexPlan = codexPlan ?? (run === defaultCliRunner ? () => readCodexPlan() : () => null);
   }
 
   /**
@@ -117,8 +121,7 @@ export class SubscriptionDetector {
       // agy not in path
     }
 
-    const rawModels = installed ? await discoverModels("google", this.run, this.catalog) : undefined;
-    const models = rawModels ? { ...rawModels, efforts: ["low", "medium", "high"] as ("low" | "medium" | "high")[] } : undefined;
+    const models = installed ? await discoverModels("google", this.run, this.catalog) : undefined;
 
     const id = "00000000-0000-7000-8000-a64000000002";
     return {
@@ -140,7 +143,7 @@ export class SubscriptionDetector {
         legalGate: "approved",
         lastHealthCheckAt: new Date().toISOString(),
         details: installed
-          ? "Google Gemini 구독 계정 연결됨 (OAuth)"
+          ? "Google 계정 연결됨 · agy가 플랜 정보를 알려주지 않아 플랜은 확인할 수 없어요"
           : "클릭하여 Google 계정으로 로그인하세요",
         metadata: {
           cli: "agy",
@@ -188,7 +191,9 @@ export class SubscriptionDetector {
     }
 
     const rawModels = installed ? await discoverModels("openai", this.run, this.catalog) : undefined;
-    const models = rawModels ? { ...rawModels, efforts: ["low", "medium", "high"] as ("low" | "medium" | "high")[] } : undefined;
+    // codex has no plan command; the ChatGPT login token carries the plan type.
+    const plan = authenticated ? this.codexPlan() : null;
+    const models = rawModels ? { ...rawModels, plan, planVerified: plan !== null } : undefined;
 
     const id = "00000000-0000-7000-8000-c0de80000003";
     return {
@@ -209,7 +214,7 @@ export class SubscriptionDetector {
         legalGate: "approved",
         lastHealthCheckAt: new Date().toISOString(),
         details: installed && authenticated
-          ? "OpenAI ChatGPT 구독 계정 연결됨 (OAuth)"
+          ? `ChatGPT 계정 연결됨 · ${plan ? `${plan.toUpperCase()} 플랜` : "플랜 확인 불가"}`
           : "클릭하여 OpenAI 계정으로 로그인하세요",
         metadata: {
           cli: "codex",

@@ -111,6 +111,23 @@ describe("AgyProvider", () => {
 });
 
 describe("CodexProvider", () => {
+  it("passes the chosen reasoning effort as a config override before '--'", async () => {
+    const { run, calls } = fakeRunner("answer\n");
+    await new CodexProvider(run).executeChat({
+      runId: RID,
+      workspaceId: WID,
+      prompt: "hello",
+      model: "gpt-5.6-terra",
+      effort: "xhigh"
+    });
+    expect(calls[0].args).toEqual([
+      "exec", "--skip-git-repo-check", "-s", "read-only",
+      "-m", "gpt-5.6-terra",
+      "-c", "model_reasoning_effort=xhigh",
+      "--", "hello"
+    ]);
+  });
+
   it("builds the read-only chat args with model, prompt last after '--'", async () => {
     const { run, calls } = fakeRunner("answer\n");
     const p = new CodexProvider(run);

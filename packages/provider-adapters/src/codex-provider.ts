@@ -2,6 +2,7 @@ import { CliRunner, defaultCliRunner } from "./cli-runner.js";
 import {
   ChatExecutionContext,
   ChatExecutionResult,
+  Effort,
   IProviderAdapter,
   ProviderCallError,
   TaskExecutionContext,
@@ -10,10 +11,12 @@ import {
 
 type Sandbox = "read-only" | "workspace-write";
 
-function codexArgs(prompt: string, sandbox: Sandbox, model?: string): string[] {
+function codexArgs(prompt: string, sandbox: Sandbox, model?: string, effort?: Effort): string[] {
   return [
     "exec", "--skip-git-repo-check", "-s", sandbox,
     ...(model ? ["-m", model] : []),
+    // Unquoted on purpose: codex reads a value that is not valid TOML as a literal string, and no shell quoting is needed.
+    ...(effort ? ["-c", `model_reasoning_effort=${effort}`] : []),
     // "--" keeps a prompt that looks like a flag from being parsed as one.
     "--", prompt
   ];
@@ -44,10 +47,10 @@ export class CodexProvider implements IProviderAdapter {
 
   constructor(private readonly run: CliRunner = defaultCliRunner) {}
 
-  private async call(prompt: string, sandbox: Sandbox, timeoutMs: number, model?: string, cwd?: string): Promise<string> {
+  private async call(prompt: string, sandbox: Sandbox, timeoutMs: number, model?: string, cwd?: string, effort?: Effort): Promise<string> {
     let stdout: string;
     try {
-      ({ stdout } = await this.run("codex", codexArgs(prompt, sandbox, model), { cwd, timeoutMs }));
+      ({ stdout } = await this.run("codex", codexArgs(prompt, sandbox, model, effort), { cwd, timeoutMs }));
     } catch (err: any) {
       throw new ProviderCallError("Codex", err?.message ?? String(err));
     }
@@ -57,7 +60,7 @@ export class CodexProvider implements IProviderAdapter {
   }
 
   public async executeChat(context: ChatExecutionContext): Promise<ChatExecutionResult> {
-    const { prompt, workspaceId, runId, model, cwd, context: runCtx } = context;
+    const { prompt, workspaceId, runId, model, effort, cwd, context: runCtx } = context;
 
     let fullPrompt = prompt;
     const attachments = runCtx?.attachments as Array<{ name: string; text?: string }> | undefined;
@@ -67,12 +70,12 @@ export class CodexProvider implements IProviderAdapter {
     }
 
     const startTime = Date.now();
-    const output = await this.call(fullPrompt, "read-only", 120000, model, cwd);
+    const output = await this.call(fullPrompt, "read-only", 120000, model, cwd, effort);
     return { output, usage: unmeasuredUsage(workspaceId, runId, "chat", model, Date.now() - startTime) };
   }
 
   public async execute(context: TaskExecutionContext): Promise<TaskExecutionResult> {
-    const { task, runId, workspaceId, model, cwd, onEvent } = context;
+    const { task, runId, workspaceId, model, effort, cwd, onEvent } = context;
 
     if (onEvent) {
       await onEvent("task:started", { runId, taskId: task.id, taskKey: task.taskKey, title: task.title });
@@ -81,7 +84,7 @@ export class CodexProvider implements IProviderAdapter {
 
     const startTime = Date.now();
     const taskPrompt = `작업: ${task.title}\n요구역량: ${task.capabilityRequirements.join(", ")}\n코드 변경 요약을 2줄 이내로 제시해줘.`;
-    const output = await this.call(taskPrompt, "workspace-write", 300000, model, cwd);
+    const output = await this.call(taskPrompt, "workspace-write", 300000, model, cwd, effort);
 
     const filesChanged: Array<{ path: string; diff: string }> = [];
     const usage = unmeasuredUsage(workspaceId, runId, task.id, model, Date.now() - startTime);

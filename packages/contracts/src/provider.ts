@@ -60,13 +60,18 @@ export const RegisterApiKeyDTOSchema = z.object({
 });
 export type RegisterApiKeyDTO = z.infer<typeof RegisterApiKeyDTOSchema>;
 
-export const ModelOptionSchema = z.object({ id: z.string(), label: z.string() });
+/** Every level the claude / agy / codex CLIs accept; each connection or model offers a subset. */
+export const EffortSchema = z.enum(["low", "medium", "high", "xhigh", "max", "ultra"]);
+export type Effort = z.infer<typeof EffortSchema>;
+
+// `efforts` is set when a model has its own levels (codex); otherwise the connection's levels apply.
+export const ModelOptionSchema = z.object({ id: z.string(), label: z.string(), efforts: z.array(EffortSchema).optional() });
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
 export const ConnectionModelsSchema = z.object({
   plan: z.string().nullable(),
   planVerified: z.boolean(),
-  efforts: z.array(z.enum(["low", "medium", "high"])),
+  efforts: z.array(EffortSchema),
   models: z.array(ModelOptionSchema),
   source: z.string(),
   refreshedAt: z.string().datetime()

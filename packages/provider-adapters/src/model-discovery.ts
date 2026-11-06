@@ -1,6 +1,7 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { ConnectionModels, ModelOption, ProviderName } from "@aso/contracts";
+import { ConnectionModels, Effort, EffortSchema, ModelOption, ProviderName } from "@aso/contracts";
 import { CliRunner } from "./cli-runner.js";
 
 export interface ModelCatalogEntry {
@@ -28,6 +29,60 @@ export function parseAgyModels(stdout: string): ModelOption[] {
   return models;
 }
 
+const EFFORTS = EffortSchema.options;
+const isEffort = (e: unknown): e is Effort => EFFORTS.includes(e as Effort);
+/** Keeps the canonical low → ultra order no matter how the CLI listed them. */
+const orderEfforts = (found: Iterable<string>): Effort[] => {
+  const set = new Set(found);
+  return EFFORTS.filter((e) => set.has(e));
+};
+
+/**
+ * agy encodes effort in the model id (`...-low/-medium/-high`), so each model offers the suffixes
+ * listed for its own base (`gpt-oss-120b-medium` alone offers only medium).
+ */
+function withAgyEfforts(models: ModelOption[]): ModelOption[] {
+  const split = (id: string) => {
+    const m = id.match(/^(.*)-([a-z]+)$/);
+    return m && isEffort(m[2]) ? { base: m[1], effort: m[2] } : { base: id, effort: "" };
+  };
+  const byBase = new Map<string, string[]>();
+  for (const m of models) {
+    const { base, effort } = split(m.id);
+    byBase.set(base, [...(byBase.get(base) ?? []), effort]);
+  }
+  return models.map((m) => ({ ...m, efforts: orderEfforts(byBase.get(split(m.id).base) ?? []) }));
+}
+
+// A model id becomes a CLI argument, so it must look like an id and never like a flag.
+const SAFE_MODEL_ID = /^[A-Za-z0-9][\w.:-]*$/;
+
+/** `codex debug models` JSON → listed models with their own effort levels; hidden models and unknown levels are dropped. */
+export function parseCodexModels(stdout: string): ModelOption[] {
+  const parsed = JSON.parse(stdout);
+  return (parsed?.models ?? [])
+    .filter((m: any) => m?.visibility === "list" && typeof m.slug === "string" && SAFE_MODEL_ID.test(m.slug))
+    .map((m: any) => ({
+      id: m.slug,
+      label: typeof m.display_name === "string" ? m.display_name : m.slug,
+      efforts: orderEfforts((m.supported_reasoning_levels ?? []).map((l: any) => l?.effort).filter(isEffort))
+    }));
+}
+
+/** Reads only `chatgpt_plan_type` from the codex id token; never returns or logs the tokens themselves. */
+export function readCodexPlan(file = path.join(os.homedir(), ".codex", "auth.json")): string | null {
+  try {
+    const idToken = JSON.parse(fs.readFileSync(file, "utf8"))?.tokens?.id_token;
+    if (typeof idToken !== "string") return null;
+    const claims = JSON.parse(Buffer.from(idToken.split(".")[1] ?? "", "base64url").toString("utf8"));
+    const plan = claims?.["https://api.openai.com/auth"]?.chatgpt_plan_type;
+    // The token is not signature-checked, so accept only a short plain plan name for the label.
+    return typeof plan === "string" && /^[a-z_]{1,32}$/.test(plan) ? plan : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseClaudeAuthStatus(stdout: string): { loggedIn: boolean; subscriptionType: string | null } {
   try {
     const parsed = JSON.parse(stdout);
@@ -50,7 +105,7 @@ export function loadModelCatalog(file = path.resolve(process.cwd(), "config/mode
   }
 }
 
-/** Never calls a model: only `agy models` and `claude auth status`, plus the checked-in catalog. */
+/** Never calls a model: only `agy models`, `claude auth status` and `codex debug models`, plus the checked-in catalog. */
 export async function discoverModels(
   provider: ProviderName,
   run: CliRunner,
@@ -69,7 +124,8 @@ export async function discoverModels(
   if (provider === "google") {
     try {
       const { stdout } = await run("agy", ["models"], { timeoutMs: TIMEOUT_MS });
-      return { ...base, planVerified: true, models: parseAgyModels(stdout), source: "agy models" };
+      const models = withAgyEfforts(parseAgyModels(stdout));
+      return { ...base, planVerified: true, efforts: orderEfforts(models.flatMap((m) => m.efforts ?? [])), models, source: "agy models" };
     } catch {
       return { ...base, source: "agy models" };
     }
@@ -83,7 +139,8 @@ export async function discoverModels(
       return {
         plan: subscriptionType,
         planVerified: subscriptionType !== null,
-        efforts: ["low", "medium", "high"],
+        // `claude --help`: --effort <level> (low, medium, high, xhigh, max)
+        efforts: ["low", "medium", "high", "xhigh", "max"],
         models: catalog.claude.models,
         source,
         refreshedAt
@@ -93,5 +150,15 @@ export async function discoverModels(
     }
   }
 
-  return { ...base, models: catalog.codex.models, source: `catalog ${catalog.codex.checkedAt}` };
+  try {
+    const { stdout } = await run("codex", ["debug", "models"], { timeoutMs: TIMEOUT_MS });
+    const models = parseCodexModels(stdout);
+    if (models.length > 0) {
+      return { ...base, efforts: orderEfforts(models.flatMap((m) => m.efforts ?? [])), models, source: "codex debug models" };
+    }
+  } catch {
+    // older codex or unexpected output: fall back to the checked-in catalog
+  }
+  // codex accepted low/medium/high before per-model levels existed, so the fallback keeps offering them.
+  return { ...base, efforts: ["low", "medium", "high"], models: catalog.codex.models, source: `catalog ${catalog.codex.checkedAt}` };
 }

@@ -115,6 +115,27 @@ describe("run with a selected subscription model", () => {
     expect(JSON.parse(res.body).error.code).toBe("EFFORT_NOT_SUPPORTED");
   });
 
+  it("rejects an effort the chosen model does not support even if the connection offers it", async () => {
+    const { db, server, connectionId } = await setup();
+    await db.providers.updateMetadata(connectionId, {
+      models: {
+        plan: "pro",
+        planVerified: true,
+        efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+        models: [
+          { id: "sonnet", label: "Sonnet", efforts: ["low", "medium", "high", "xhigh", "max"] },
+          { id: "opus", label: "Opus", efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] }
+        ],
+        source: "x",
+        refreshedAt: new Date().toISOString()
+      }
+    });
+    await pairRunnerWithFolder(server, tmpFolder());
+    const res = await postRun(server, { connectionId, model: "sonnet", effort: "ultra" });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error.code).toBe("EFFORT_NOT_SUPPORTED");
+  });
+
   it("requires an active workspace folder", async () => {
     const { server, connectionId } = await setup();
     const res = await postRun(server, { connectionId, model: "sonnet" });

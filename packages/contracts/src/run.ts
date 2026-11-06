@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ExecutionRuntimeSchema } from "./project.js";
-import { ConnectionModeSchema } from "./provider.js";
+import { ConnectionModeSchema, EffortSchema } from "./provider.js";
 
 export const RunStatusSchema = z.enum([
   "queued",
@@ -170,7 +170,7 @@ export const CreateRunDTOSchema = z.object({
   providerPreference: z.string().default("auto"),
   connectionId: z.string().uuid().optional(),
   model: z.string().optional(),
-  effort: z.enum(["low", "medium", "high"]).optional(),
+  effort: EffortSchema.optional(),
   budget: RunBudgetSchema.partial().optional(),
   attachments: z
     .array(

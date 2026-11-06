@@ -40,10 +40,13 @@ export async function runRoutes(
       const connection = (await db.providers.listForWorkspace(workspaceId)).find((c) => c.id === dto.connectionId);
       if (!connection) return fail("CONNECTION_NOT_FOUND", "연결을 찾을 수 없어요");
       const offered = connection.metadata?.models as ConnectionModels | undefined;
-      if (dto.model && !offered?.models.some((m) => m.id === dto.model)) {
+      const chosenModel = dto.model ? offered?.models.find((m) => m.id === dto.model) : undefined;
+      if (dto.model && !chosenModel) {
         return fail("MODEL_NOT_AVAILABLE", "이 구독에서 쓸 수 없는 모델이에요");
       }
-      if (dto.effort && !offered?.efforts.includes(dto.effort)) {
+      // A model with its own levels (codex) narrows what the connection offers.
+      const allowedEfforts = chosenModel?.efforts ?? offered?.efforts;
+      if (dto.effort && !allowedEfforts?.includes(dto.effort)) {
         return fail("EFFORT_NOT_SUPPORTED", "이 구독에서 쓸 수 없는 강도예요");
       }
       cwd = await resolveActiveWorkspacePath(db, workspaceId);

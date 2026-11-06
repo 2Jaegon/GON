@@ -9,6 +9,13 @@ import {
 } from "@aso/contracts";
 
 describe("Contracts Zod Schemas", () => {
+  it("accepts every effort level the CLIs offer and rejects unknown ones", () => {
+    for (const effort of ["low", "medium", "high", "xhigh", "max", "ultra"]) {
+      expect(CreateRunDTOSchema.safeParse({ request: "x", effort }).success).toBe(true);
+    }
+    expect(CreateRunDTOSchema.safeParse({ request: "x", effort: "warp" }).success).toBe(false);
+  });
+
   it("validates Workspace schema", () => {
     const valid = {
       id: "00000000-0000-7000-8000-000000000001",
