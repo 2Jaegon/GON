@@ -240,6 +240,26 @@ describe("Google Sign-In, Session & Protected Routes", () => {
     expect(res.statusCode).toBe(204);
     expect(res.headers["access-control-allow-origin"]).not.toBe("*");
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
+
+    // Allows Cloudflare Pages preview origins
+    const pagesRes = await server.inject({
+      method: "OPTIONS",
+      url: "/api/v1/workspaces",
+      headers: {
+        origin: "https://main.gon-bmb.pages.dev"
+      }
+    });
+    expect(pagesRes.headers["access-control-allow-origin"]).toBe("https://main.gon-bmb.pages.dev");
+
+    // Allows axworks.site subdomains
+    const axRes = await server.inject({
+      method: "OPTIONS",
+      url: "/api/v1/workspaces",
+      headers: {
+        origin: "https://gon.axworks.site"
+      }
+    });
+    expect(axRes.headers["access-control-allow-origin"]).toBe("https://gon.axworks.site");
   });
 
   it("supports email/password signup and login with session cookie", async () => {

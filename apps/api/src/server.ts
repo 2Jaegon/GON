@@ -101,9 +101,30 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
       "http://localhost:3000",
       "http://127.0.0.1:3000"
     ]);
+
+    let isAllowed = false;
+    if (reqOrigin) {
+      if (allowedOrigins.has(reqOrigin)) {
+        isAllowed = true;
+      } else {
+        try {
+          const parsed = new URL(reqOrigin);
+          if (
+            parsed.hostname.endsWith(".pages.dev") ||
+            parsed.hostname.endsWith(".axworks.site") ||
+            parsed.hostname === "axworks.site"
+          ) {
+            isAllowed = true;
+          }
+        } catch {
+          // ignore invalid url
+        }
+      }
+    }
+
     reply.header(
       "Access-Control-Allow-Origin",
-      reqOrigin && allowedOrigins.has(reqOrigin) ? reqOrigin : webOrigin
+      isAllowed && reqOrigin ? reqOrigin : webOrigin
     );
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
