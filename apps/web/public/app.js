@@ -3,10 +3,23 @@
 // Pure clean typography. No icons or emojis outside the sidebar navigation.
 // ==========================================================================
 
+const isLocal = typeof window !== "undefined" && (
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1" ||
+  window.location.hostname.startsWith("192.168.") ||
+  window.location.hostname.startsWith("10.") ||
+  window.location.hostname.endsWith(".local")
+);
+
 const API_HOST = (typeof window !== "undefined" && window.location && window.location.hostname)
   ? window.location.hostname
   : "127.0.0.1";
-const API_URL = `http://${API_HOST}:4000/api/v1`;
+
+const API_URL = isLocal
+  ? `http://${API_HOST}:4000/api/v1`
+  : (typeof window !== "undefined" && window.location && window.location.hostname.includes("axworks.site")
+      ? `https://api-${window.location.hostname.replace(/^api-/, "")}/api/v1`
+      : "https://api-gon.axworks.site/api/v1");
 
 let currentWorkspaceId = "00000000-0000-7000-8000-000000000002";
 let currentProjectId = "00000000-0000-7000-8000-000000000003";
