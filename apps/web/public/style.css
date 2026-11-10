@@ -2564,7 +2564,8 @@ button {
   background-color: rgba(0, 0, 0, 0.65);
 }
 
-.settings-modal {
+.settings-modal,
+.modal-dialog {
   width: 90%;
   max-width: 500px;
   background-color: rgb(var(--c-surface));
@@ -2597,7 +2598,8 @@ button {
   }
 }
 
-.settings-modal-header {
+.settings-modal-header,
+.modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2605,14 +2607,16 @@ button {
   border-bottom: 1px solid rgb(var(--c-line));
 }
 
-.settings-modal-title {
+.settings-modal-title,
+.modal-title {
   font-size: 1.05rem;
   font-weight: 700;
   color: rgb(var(--c-ink));
   letter-spacing: -0.02em;
 }
 
-.settings-close-btn {
+.settings-close-btn,
+.modal-close-btn {
   width: 30px;
   height: 30px;
   border-radius: 6px;
@@ -2621,14 +2625,19 @@ button {
   justify-content: center;
   color: rgb(var(--c-sub));
   transition: all 120ms ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
-.settings-close-btn:hover {
+.settings-close-btn:hover,
+.modal-close-btn:hover {
   background-color: rgb(var(--c-raised));
   color: rgb(var(--c-ink));
 }
 
-.settings-modal-body {
+.settings-modal-body,
+.modal-body {
   padding: 20px;
   display: flex;
   flex-direction: column;
