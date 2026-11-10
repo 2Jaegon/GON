@@ -146,7 +146,10 @@ export async function createApiServer(options: ApiServerOptions = {}): Promise<{
       }
 
       const cookies = parseCookies(req.headers.cookie);
-      const token = cookies[SESSION_COOKIE_NAME];
+      let token = cookies[SESSION_COOKIE_NAME];
+      if (!token && typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ")) {
+        token = req.headers.authorization.slice(7).trim();
+      }
 
       if (!token) {
         return reply.status(401).send({

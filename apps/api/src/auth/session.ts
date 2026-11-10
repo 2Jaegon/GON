@@ -29,11 +29,13 @@ export function parseCookies(cookieHeader?: string): Record<string, string> {
   return cookies;
 }
 
-export function buildSessionCookie(token: string): string {
-  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}`;
+export function buildSessionCookie(token: string, isSecure = (process.env.NODE_ENV === "production" || process.env.WEB_ORIGIN?.startsWith("https"))): string {
+  const sameSite = isSecure ? "SameSite=None; Secure" : "SameSite=Lax";
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; ${sameSite}; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}`;
 }
 
-export function buildExpiredSessionCookie(): string {
-  return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+export function buildExpiredSessionCookie(isSecure = (process.env.NODE_ENV === "production" || process.env.WEB_ORIGIN?.startsWith("https"))): string {
+  const sameSite = isSecure ? "SameSite=None; Secure" : "SameSite=Lax";
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; ${sameSite}; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
